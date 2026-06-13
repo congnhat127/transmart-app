@@ -1,0 +1,28 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Cấu hình chứa API Key nhạy cảm
+storage/config.json
+
+# Môi trường ảo Python
+.venv/
+venv/
+ENV/
+env/
+
+# IDEs
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# File rác hệ điều hành
+Thumbs.db
+ehthumbs.db
+Desktop.ini

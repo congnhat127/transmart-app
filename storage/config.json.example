@@ -1,0 +1,14 @@
+{
+    "api_key": "",
+    "provider": "gemini",
+    "gemini_model": "gemini-1.5-flash",
+    "openai_model": "gpt-4o-mini",
+    "openai_base_url": "https://api.openai.com/v1",
+    "source_lang": "Auto",
+    "target_lang": "Vietnamese",
+    "hotkey": "alt+d",
+    "ocr_hotkey": "alt+q",
+    "show_pop_icon": true,
+    "theme": "dark",
+    "font_size": 13
+}
