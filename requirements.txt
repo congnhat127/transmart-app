@@ -1,20 +1,9 @@
-# Giao diện người dùng
 PyQt6>=6.6.1
-
-# Lắng nghe sự kiện bàn phím & giả lập Ctrl+C
 keyboard>=0.13.5
 pynput>=1.7.6
 pyperclip>=1.9.0
-
-# Dịch vụ AI (Gemini, OpenAI, v.v.)
 google-generativeai>=0.4.0
 openai>=1.12.0
 requests>=2.31.0
-
-# Dịch vụ phát âm (Text-To-Speech)
 edge-tts>=6.1.9
-
-# Chụp ảnh và OCR dự phòng
 Pillow>=10.2.0
-# winrt-Windows.Media.Ocr>=2.0.0.post1 (Chỉ dành cho Windows để gọi OCR nội bộ)
-# pytesseract>=0.3.10 (Nếu muốn sử dụng Tesseract)
