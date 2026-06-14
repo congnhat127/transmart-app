@@ -25,7 +25,7 @@ DEFAULT_SETTINGS = {
     "openai_base_url": "https://api.openai.com/v1",
     "source_lang": "Auto",
     "target_lang": "Vietnamese",
-    "hotkey": "alt+d",
+    "hotkey": "alt+z",
     "ocr_hotkey": "alt+q",
     "show_pop_icon": True,
     "theme": "dark",
