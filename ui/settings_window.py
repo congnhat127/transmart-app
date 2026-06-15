@@ -1,10 +1,345 @@
-from PyQt6.QtWidgets import QWidget
+import os
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
+    QComboBox, QSpinBox, QPushButton, QTabWidget, QFormLayout, QGroupBox
+)
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QFont
+from config.settings import settings_manager
 
 class SettingsWindow(QWidget):
-    """Giao diện Dashboard cấu hình ứng dụng (API Key, phím tắt, giao diện...)."""
-    def __init__(self):
+    """
+    Giao diện Dashboard cấu hình ứng dụng (API Key, phím tắt, giao diện...).
+    Được thiết kế hiện đại, đồng bộ phong cách với toàn bộ ứng dụng TransMart.
+    """
+    settings_saved = pyqtSignal()  # Tín hiệu phát ra sau khi lưu cấu hình thành công
+
+    def __init__(self, theme: str = "dark"):
         super().__init__()
-        pass
+        self.theme = theme
+        self.setWindowTitle("TransMart - Cài đặt hệ thống")
+        self.setMinimumSize(420, 480)
+        self.resize(450, 500)
+        
+        # Thiết lập cờ cửa sổ (có viền chuẩn và luôn nổi trên cùng để đè lên pop-up chính)
+        self.setWindowFlags(
+            Qt.WindowType.Window | 
+            Qt.WindowType.WindowCloseButtonHint | 
+            Qt.WindowType.WindowMinimizeButtonHint |
+            Qt.WindowType.WindowStaysOnTopHint
+        )
+        
+        # Áp dụng stylesheet đồng bộ phong cách
+        self._apply_style()
+        self._init_ui()
+        self.load_values()
+
+    def _init_ui(self):
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.setSpacing(15)
+
+        # Tiêu đề Header
+        header_layout = QHBoxLayout()
+        header_title = QLabel("CÀI ĐẶT HỆ THỐNG")
+        header_title.setObjectName("HeaderTitle")
+        header_title.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
+        header_layout.addWidget(header_title)
+        header_layout.addStretch()
+        main_layout.addLayout(header_layout)
+
+        # Thanh Tabs chính
+        self.tabs = QTabWidget()
+        self.tabs.setObjectName("SettingsTabs")
+        
+        # --- TAB 1: CÀI ĐẶT CHUNG ---
+        tab_general = QWidget()
+        general_layout = QVBoxLayout(tab_general)
+        general_layout.setContentsMargins(10, 15, 10, 15)
+        general_layout.setSpacing(12)
+        
+        form_general = QFormLayout()
+        form_general.setSpacing(10)
+        form_general.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        
+        # Giao diện (Theme)
+        self.theme_combo = QComboBox()
+        self.theme_combo.addItems(["Tối (Dark Mode)", "Sáng (Light Mode)"])
+        form_general.addRow("Giao diện:", self.theme_combo)
+        
+        # Cỡ chữ (Font Size)
+        self.font_size_spin = QSpinBox()
+        self.font_size_spin.setRange(10, 20)
+        self.font_size_spin.setValue(13)
+        self.font_size_spin.setSuffix(" px")
+        form_general.addRow("Cỡ chữ dịch:", self.font_size_spin)
+        
+        # Phím tắt dịch (Hotkey)
+        self.hotkey_input = QLineEdit()
+        self.hotkey_input.setPlaceholderText("Ví dụ: alt+z")
+        form_general.addRow("Phím tắt dịch:", self.hotkey_input)
+        
+        # Phím tắt OCR (OCR Hotkey)
+        self.ocr_hotkey_input = QLineEdit()
+        self.ocr_hotkey_input.setPlaceholderText("Ví dụ: alt+q")
+        form_general.addRow("Phím tắt OCR:", self.ocr_hotkey_input)
+        
+        general_layout.addLayout(form_general)
+        general_layout.addStretch()
+        self.tabs.addTab(tab_general, "Cài đặt chung")
+        
+        # --- TAB 2: CẤU HÌNH API KEY ---
+        tab_api = QWidget()
+        api_layout = QVBoxLayout(tab_api)
+        api_layout.setContentsMargins(10, 15, 10, 15)
+        api_layout.setSpacing(12)
+        
+        # Nhóm cấu hình Gemini API
+        gemini_group = QGroupBox("Google Gemini Cloud (Khuyên dùng)")
+        gemini_group.setObjectName("ApiGroupBox")
+        gemini_form = QFormLayout(gemini_group)
+        self.gemini_key_input = QLineEdit()
+        self.gemini_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.gemini_key_input.setPlaceholderText("Nhập Gemini API Key tại đây...")
+        gemini_form.addRow("API Key:", self.gemini_key_input)
+        
+        self.gemini_model_combo = QComboBox()
+        self.gemini_model_combo.addItems(["gemini-1.5-flash", "gemini-1.5-pro"])
+        gemini_form.addRow("Dòng Model:", self.gemini_model_combo)
+        
+        # Nhóm cấu hình OpenAI API
+        openai_group = QGroupBox("OpenAI GPT Cloud")
+        openai_group.setObjectName("ApiGroupBox")
+        openai_form = QFormLayout(openai_group)
+        self.openai_key_input = QLineEdit()
+        self.openai_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.openai_key_input.setPlaceholderText("Nhập OpenAI API Key tại đây...")
+        openai_form.addRow("API Key:", self.openai_key_input)
+        
+        self.openai_model_combo = QComboBox()
+        self.openai_model_combo.addItems(["gpt-4o-mini", "gpt-4o"])
+        openai_form.addRow("Dòng Model:", self.openai_model_combo)
+        
+        api_layout.addWidget(gemini_group)
+        api_layout.addWidget(openai_group)
+        api_layout.addStretch()
+        
+        self.tabs.addTab(tab_api, "Cấu hình AI API")
+        
+        main_layout.addWidget(self.tabs)
+
+        # --- FOOTER BUTTONS ---
+        footer_buttons = QHBoxLayout()
+        self.save_btn = QPushButton("Lưu cấu hình")
+        self.save_btn.setObjectName("SaveBtn")
+        self.save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.save_btn.clicked.connect(self.save_values)
+        
+        self.cancel_btn = QPushButton("Hủy")
+        self.cancel_btn.setObjectName("CancelBtn")
+        self.cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.cancel_btn.clicked.connect(self.close)
+        
+        footer_buttons.addStretch()
+        footer_buttons.addWidget(self.cancel_btn)
+        footer_buttons.addWidget(self.save_btn)
+        main_layout.addLayout(footer_buttons)
 
     def load_values(self):
-        pass
+        """Đọc và nạp dữ liệu từ file settings.json lên UI."""
+        settings = settings_manager.load_settings()
+        
+        # Nạp cài đặt chung
+        theme_val = settings.get("theme", "dark")
+        self.theme_combo.setCurrentIndex(0 if theme_val == "dark" else 1)
+        self.font_size_spin.setValue(settings.get("font_size", 13))
+        self.hotkey_input.setText(settings.get("hotkey", "alt+z"))
+        self.ocr_hotkey_input.setText(settings.get("ocr_hotkey", "alt+q"))
+        
+        # Nạp cài đặt API
+        self.gemini_key_input.setText(settings.get("gemini_api_key", ""))
+        gemini_model = settings.get("gemini_model", "gemini-1.5-flash")
+        idx_gemini = self.gemini_model_combo.findText(gemini_model)
+        if idx_gemini >= 0:
+            self.gemini_model_combo.setCurrentIndex(idx_gemini)
+            
+        self.openai_key_input.setText(settings.get("openai_api_key", ""))
+        openai_model = settings.get("openai_model", "gpt-4o-mini")
+        idx_openai = self.openai_model_combo.findText(openai_model)
+        if idx_openai >= 0:
+            self.openai_model_combo.setCurrentIndex(idx_openai)
+
+    def save_values(self):
+        """Lưu toàn bộ cài đặt từ UI xuống file settings.json."""
+        theme_val = "dark" if self.theme_combo.currentIndex() == 0 else "light"
+        
+        new_settings = {
+            "theme": theme_val,
+            "font_size": self.font_size_spin.value(),
+            "hotkey": self.hotkey_input.text().strip().lower(),
+            "ocr_hotkey": self.ocr_hotkey_input.text().strip().lower(),
+            "gemini_api_key": self.gemini_key_input.text().strip(),
+            "gemini_model": self.gemini_model_combo.currentText(),
+            "openai_api_key": self.openai_key_input.text().strip(),
+            "openai_model": self.openai_model_combo.currentText()
+        }
+        
+        settings_manager.save_settings(new_settings)
+        self.settings_saved.emit()
+        self.close()
+
+    def _apply_style(self):
+        """Thiết lập Style CSS cho Settings Window."""
+        if self.theme == "dark":
+            self.setStyleSheet("""
+                QWidget {
+                    background-color: #1E1E1E;
+                    color: #E0E0E0;
+                    font-family: 'Segoe UI', sans-serif;
+                }
+                QLabel#HeaderTitle {
+                    color: #FFFFFF;
+                }
+                QTabWidget::pane {
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    border-radius: 6px;
+                    background-color: #252526;
+                }
+                QTabBar::tab {
+                    background-color: #2D2D2D;
+                    color: #888888;
+                    padding: 8px 16px;
+                    border-top-left-radius: 4px;
+                    border-top-right-radius: 4px;
+                    border: 1px solid rgba(255, 255, 255, 0.05);
+                    margin-right: 2px;
+                }
+                QTabBar::tab:selected {
+                    background-color: #252526;
+                    color: #FFFFFF;
+                    border-bottom-color: transparent;
+                }
+                QGroupBox#ApiGroupBox {
+                    font-weight: bold;
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    border-radius: 6px;
+                    margin-top: 15px;
+                    padding-top: 15px;
+                }
+                QGroupBox#ApiGroupBox::title {
+                    subcontrol-origin: margin;
+                    subcontrol-position: top left;
+                    left: 10px;
+                    padding: 0 5px;
+                    color: #0078D4;
+                }
+                QLineEdit, QComboBox, QSpinBox {
+                    background-color: #2D2D2D;
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    border-radius: 4px;
+                    padding: 5px 8px;
+                    color: #FFFFFF;
+                }
+                QLineEdit:focus, QComboBox:focus, QSpinBox:focus {
+                    border: 1px solid #0078D4;
+                }
+                QPushButton {
+                    padding: 6px 16px;
+                    border-radius: 4px;
+                    font-weight: 600;
+                }
+                QPushButton#SaveBtn {
+                    background-color: #0078D4;
+                    color: #FFFFFF;
+                    border: none;
+                }
+                QPushButton#SaveBtn:hover {
+                    background-color: #1084E3;
+                }
+                QPushButton#CancelBtn {
+                    background-color: transparent;
+                    color: #888888;
+                    border: 1px solid rgba(255, 255, 255, 0.15);
+                }
+                QPushButton#CancelBtn:hover {
+                    background-color: rgba(255, 255, 255, 0.05);
+                    color: #FFFFFF;
+                }
+            """)
+        else:
+            self.setStyleSheet("""
+                QWidget {
+                    background-color: #F3F3F3;
+                    color: #333333;
+                    font-family: 'Segoe UI', sans-serif;
+                }
+                QLabel#HeaderTitle {
+                    color: #1A1A1A;
+                }
+                QTabWidget::pane {
+                    border: 1px solid rgba(0, 0, 0, 0.1);
+                    border-radius: 6px;
+                    background-color: #FFFFFF;
+                }
+                QTabBar::tab {
+                    background-color: #E5E5E5;
+                    color: #666666;
+                    padding: 8px 16px;
+                    border-top-left-radius: 4px;
+                    border-top-right-radius: 4px;
+                    border: 1px solid rgba(0, 0, 0, 0.05);
+                    margin-right: 2px;
+                }
+                QTabBar::tab:selected {
+                    background-color: #FFFFFF;
+                    color: #0078D4;
+                    border-bottom-color: transparent;
+                    font-weight: bold;
+                }
+                QGroupBox#ApiGroupBox {
+                    font-weight: bold;
+                    border: 1px solid rgba(0, 0, 0, 0.15);
+                    border-radius: 6px;
+                    margin-top: 15px;
+                    padding-top: 15px;
+                }
+                QGroupBox#ApiGroupBox::title {
+                    subcontrol-origin: margin;
+                    subcontrol-position: top left;
+                    left: 10px;
+                    padding: 0 5px;
+                    color: #0078D4;
+                }
+                QLineEdit, QComboBox, QSpinBox {
+                    background-color: #FFFFFF;
+                    border: 1px solid rgba(0, 0, 0, 0.15);
+                    border-radius: 4px;
+                    padding: 5px 8px;
+                    color: #333333;
+                }
+                QLineEdit:focus, QComboBox:focus, QSpinBox:focus {
+                    border: 1px solid #0078D4;
+                }
+                QPushButton {
+                    padding: 6px 16px;
+                    border-radius: 4px;
+                    font-weight: 600;
+                }
+                QPushButton#SaveBtn {
+                    background-color: #0078D4;
+                    color: #FFFFFF;
+                    border: none;
+                }
+                QPushButton#SaveBtn:hover {
+                    background-color: #1084E3;
+                }
+                QPushButton#CancelBtn {
+                    background-color: transparent;
+                    color: #666666;
+                    border: 1px solid rgba(0, 0, 0, 0.15);
+                }
+                QPushButton#CancelBtn:hover {
+                    background-color: rgba(0, 0, 0, 0.05);
+                    color: #1A1A1A;
+                }
+            """)

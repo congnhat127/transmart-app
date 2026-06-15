@@ -1,6 +1,23 @@
 import time
+import ctypes
 import pyperclip
 import keyboard
+
+def is_clipboard_image_or_file() -> bool:
+    """Kiểm tra xem clipboard hiện tại có đang chứa hình ảnh hoặc file hay không (trên Windows)."""
+    try:
+        if ctypes.windll.user32.OpenClipboard(None):
+            # Kiểm tra định dạng ảnh CF_DIB (8), CF_BITMAP (2) hoặc CF_HDROP (15 - file)
+            has_data = (
+                ctypes.windll.user32.IsClipboardFormatAvailable(2) or   # CF_BITMAP
+                ctypes.windll.user32.IsClipboardFormatAvailable(8) or   # CF_DIB
+                ctypes.windll.user32.IsClipboardFormatAvailable(15)     # CF_HDROP
+            )
+            ctypes.windll.user32.CloseClipboard()
+            return bool(has_data)
+    except Exception:
+        pass
+    return False
 
 class ClipboardManager:
     """
@@ -9,13 +26,14 @@ class ClipboardManager:
     """
     
     @staticmethod
-    def get_selected_text(timeout: float = 0.5) -> str:
+    def get_selected_text(timeout: float = 0.5, dismiss_menu: bool = False) -> str:
         """
         Giả lập nhấn tổ hợp phím Ctrl + C để sao chép văn bản đang bôi đen và đọc nó.
         Sau khi đọc xong, khôi phục lại dữ liệu clipboard cũ của người dùng.
         
         Args:
             timeout (float): Thời gian tối đa (giây) chờ hệ điều hành nạp chữ vào clipboard.
+            dismiss_menu (bool): Gửi phím ESC để đóng các menu đang mở (như Ribbon KeyTips của Word khi nhấn Alt).
             
         Returns:
             str: Văn bản bôi đen lấy được, hoặc chuỗi trống nếu không lấy được.
@@ -46,11 +64,10 @@ class ClipboardManager:
         keyboard.release("ctrl")
         time.sleep(0.05)  # Chờ 50ms để Windows đồng bộ trạng thái phím
         
-        # Gửi phím ESC để tắt trạng thái Ribbon KeyTips (gợi ý phím tắt menu) của MS Word.
-        # Khi nhấn tổ hợp phím chứa Alt, MS Word sẽ tự kích hoạt chế độ Menu Ribbon, 
-        # chế độ này chặn các phím giả lập thông thường. Nhấn ESC sẽ đưa Word về trạng thái soạn thảo bình thường.
-        keyboard.send("esc")
-        time.sleep(0.05)
+        # Gửi phím ESC để tắt trạng thái Ribbon KeyTips (gợi ý phím tắt menu) của MS Word nếu được yêu cầu.
+        if dismiss_menu:
+            keyboard.send("esc")
+            time.sleep(0.05)
         
         # Mô phỏng hành động gõ phím Ctrl + C cấp hệ thống
         keyboard.send("ctrl+c")
@@ -71,9 +88,11 @@ class ClipboardManager:
             time.sleep(0.04)
             
         # 5. Khôi phục lại dữ liệu clipboard ban đầu của người dùng
-        try:
-            pyperclip.copy(old_clipboard)
-        except Exception:
-            pass
+        # Chỉ khôi phục nếu hiện tại clipboard KHÔNG chứa hình ảnh hoặc file mới được tạo (như ảnh chụp màn hình)
+        if not is_clipboard_image_or_file():
+            try:
+                pyperclip.copy(old_clipboard)
+            except Exception:
+                pass
             
         return selected_text if selected_text else ""
