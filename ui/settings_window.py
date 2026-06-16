@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 from config.settings import settings_manager
+from config.constants import SUPPORTED_LANGUAGES
 
 class SettingsWindow(QWidget):
     """
@@ -84,6 +85,19 @@ class SettingsWindow(QWidget):
         self.ocr_hotkey_input.setPlaceholderText("Ví dụ: alt+q")
         form_general.addRow("Phím tắt OCR:", self.ocr_hotkey_input)
         
+        # Ngôn ngữ nguồn (Source Language)
+        self.source_lang_combo = QComboBox()
+        for lang_key, lang_name in SUPPORTED_LANGUAGES.items():
+            self.source_lang_combo.addItem(lang_name, lang_key)
+        form_general.addRow("Dịch từ (Nguồn):", self.source_lang_combo)
+        
+        # Ngôn ngữ đích (Target Language)
+        self.target_lang_combo = QComboBox()
+        for lang_key, lang_name in SUPPORTED_LANGUAGES.items():
+            if lang_key != "Auto":
+                self.target_lang_combo.addItem(lang_name, lang_key)
+        form_general.addRow("Dịch sang (Đích):", self.target_lang_combo)
+        
         general_layout.addLayout(form_general)
         general_layout.addStretch()
         self.tabs.addTab(tab_general, "Cài đặt chung")
@@ -104,7 +118,11 @@ class SettingsWindow(QWidget):
         gemini_form.addRow("API Key:", self.gemini_key_input)
         
         self.gemini_model_combo = QComboBox()
-        self.gemini_model_combo.addItems(["gemini-1.5-flash", "gemini-1.5-pro"])
+        self.gemini_model_combo.addItems([
+            "gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", 
+            "gemini-3.5-flash", "gemini-flash-latest", "gemini-pro-latest", 
+            "gemini-1.5-flash", "gemini-1.5-pro"
+        ])
         gemini_form.addRow("Dòng Model:", self.gemini_model_combo)
         
         # Nhóm cấu hình OpenAI API
@@ -117,7 +135,7 @@ class SettingsWindow(QWidget):
         openai_form.addRow("API Key:", self.openai_key_input)
         
         self.openai_model_combo = QComboBox()
-        self.openai_model_combo.addItems(["gpt-4o-mini", "gpt-4o"])
+        self.openai_model_combo.addItems(["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"])
         openai_form.addRow("Dòng Model:", self.openai_model_combo)
         
         api_layout.addWidget(gemini_group)
@@ -156,6 +174,17 @@ class SettingsWindow(QWidget):
         self.hotkey_input.setText(settings.get("hotkey", "alt+z"))
         self.ocr_hotkey_input.setText(settings.get("ocr_hotkey", "alt+q"))
         
+        # Nạp cài đặt ngôn ngữ
+        source_lang = settings.get("source_lang", "Auto")
+        idx_source = self.source_lang_combo.findData(source_lang)
+        if idx_source >= 0:
+            self.source_lang_combo.setCurrentIndex(idx_source)
+            
+        target_lang = settings.get("target_lang", "Vietnamese")
+        idx_target = self.target_lang_combo.findData(target_lang)
+        if idx_target >= 0:
+            self.target_lang_combo.setCurrentIndex(idx_target)
+        
         # Nạp cài đặt API
         self.gemini_key_input.setText(settings.get("gemini_api_key", ""))
         gemini_model = settings.get("gemini_model", "gemini-1.5-flash")
@@ -178,6 +207,8 @@ class SettingsWindow(QWidget):
             "font_size": self.font_size_spin.value(),
             "hotkey": self.hotkey_input.text().strip().lower(),
             "ocr_hotkey": self.ocr_hotkey_input.text().strip().lower(),
+            "source_lang": self.source_lang_combo.currentData(),
+            "target_lang": self.target_lang_combo.currentData(),
             "gemini_api_key": self.gemini_key_input.text().strip(),
             "gemini_model": self.gemini_model_combo.currentText(),
             "openai_api_key": self.openai_key_input.text().strip(),

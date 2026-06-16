@@ -1,7 +1,7 @@
 # ui/pop_translation.py
 import pyperclip
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTextEdit, QFrame
-from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QTimer
+from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QTimer, QEvent
 from PyQt6.QtGui import QMouseEvent, QFont
 
 from ui.styles import get_translation_popup_style
@@ -280,3 +280,10 @@ class PopTranslationWidget(QWidget):
     def mouseReleaseEvent(self, event: QMouseEvent):
         self.drag_position = None
         event.accept()
+
+    def changeEvent(self, event):
+        """Ẩn bảng dịch nổi nếu người dùng click ra ngoài (mất focus)."""
+        if event and event.type() == QEvent.Type.ActivationChange:
+            if not self.isActiveWindow():
+                self.hide()
+        super().changeEvent(event)

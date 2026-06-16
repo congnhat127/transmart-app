@@ -2,12 +2,34 @@ import sys
 import os
 import signal
 import time
-from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import QTimer
-from PyQt6.QtGui import QCursor
+from PyQt6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
+from PyQt6.QtCore import QTimer, Qt
+from PyQt6.QtGui import QCursor, QIcon, QPixmap, QPainter, QColor, QFont, QAction
 
 # Thêm đường dẫn thư mục gốc vào python path để tránh lỗi import
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+def create_tray_icon() -> QIcon:
+    """Tạo một icon động hình tròn màu xanh với chữ T màu trắng cho System Tray."""
+    pixmap = QPixmap(32, 32)
+    pixmap.fill(QColor(0, 0, 0, 0))
+    
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    
+    # Vẽ nền hình tròn màu xanh accent (#0078D4)
+    painter.setBrush(QColor(0, 120, 212))
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.drawEllipse(2, 2, 28, 28)
+    
+    # Vẽ chữ "T" màu trắng ở giữa
+    painter.setPen(QColor(255, 255, 255))
+    font = QFont("Segoe UI", 16, QFont.Weight.Bold)
+    painter.setFont(font)
+    painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, "T")
+    
+    painter.end()
+    return QIcon(pixmap)
 
 from config.settings import settings_manager
 from core.listener import SystemListener
@@ -59,6 +81,9 @@ class TransMartApp:
         self.pop_translation.api_triggered.connect(self.on_api_triggered)
         self.pop_translation.settings_triggered.connect(self.on_settings_triggered)
 
+        # 5. Khởi tạo System Tray Icon (Biểu tượng khay hệ thống)
+        self._init_tray_icon()
+
     def start(self):
         """Khởi chạy bộ lắng nghe sự kiện ngầm."""
         hotkey = self.settings.get("hotkey", "alt+z")
@@ -70,24 +95,78 @@ class TransMartApp:
         self.listener.stop()
         self.pop_icon.close()
         self.pop_translation.close()
+        if hasattr(self, "tray_icon"):
+            self.tray_icon.hide()
 
-    def on_text_selected(self, text: str, x: int, y: int):
+    def _init_tray_icon(self):
+        self.tray_icon = QSystemTrayIcon()
+        self.tray_icon.setIcon(create_tray_icon())
+        self.tray_icon.setToolTip("TransMart - Dịch thuật thông minh")
+        
+        # Tạo menu chuột phải cho khay hệ thống
+        tray_menu = QMenu()
+        
+        action_settings = QAction("⚙️ Cài đặt", self.settings_window)
+        action_settings.triggered.connect(self.on_settings_triggered)
+        tray_menu.addAction(action_settings)
+        
+        action_history = QAction("📋 Lịch sử dịch", self.history_window)
+        action_history.triggered.connect(self.on_history_triggered)
+        tray_menu.addAction(action_history)
+        
+        tray_menu.addSeparator()
+        
+        action_exit = QAction("❌ Thoát ứng dụng", self.settings_window)
+        action_exit.triggered.connect(self.exit_app)
+        tray_menu.addAction(action_exit)
+        
+        self.tray_icon.setContextMenu(tray_menu)
+        self.tray_icon.show()
+        
+        # Click hoặc Double click vào tray icon ➔ Mở cài đặt
+        self.tray_icon.activated.connect(self.on_tray_activated)
+
+    def on_tray_activated(self, reason):
+        if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
+            self.on_settings_triggered()
+
+    def exit_app(self):
+        print("\n[Hệ thống] Thoát ứng dụng từ Khay hệ thống...")
+        self.stop()
+        QApplication.quit()
+        sys.exit(0)
+
+    def on_text_selected(self, text: str, start_x: int, start_y: int, end_x: int, end_y: int):
         """Xử lý khi bôi đen chữ bằng chuột thành công."""
         # Ẩn bảng dịch cũ đi (nếu đang mở)
         self.pop_translation.hide()
         
         # Chuyển đổi tọa độ vật lý (từ pynput) sang tọa độ logic (cho PyQt6) bằng Device Pixel Ratio
         screen = QApplication.primaryScreen()
-        if screen:
-            dpi_scale = screen.devicePixelRatio()
-        else:
-            dpi_scale = 1.0
+        dpi_scale = screen.devicePixelRatio() if screen else 1.0
             
-        logical_x = int(x / dpi_scale)
-        logical_y = int(y / dpi_scale)
+        logical_start_x = int(start_x / dpi_scale)
+        logical_start_y = int(start_y / dpi_scale)
+        logical_end_x = int(end_x / dpi_scale)
+        logical_end_y = int(end_y / dpi_scale)
         
-        # Hiển thị nút tròn dịch nhanh ngay tại góc dưới bên phải vùng chọn
-        self.pop_icon.show_at(text, logical_x, logical_y)
+        # Căn giữa nút tròn theo chiều ngang của vùng bôi đen:
+        # Tọa độ X ở giữa vùng bôi đen = (logical_start_x + logical_end_x) / 2
+        center_x = int((logical_start_x + logical_end_x) / 2)
+        # Nút tròn nằm ngay dưới dòng cuối cùng:
+        # Tọa độ Y ở dưới dòng cuối cùng = max(logical_start_y, logical_end_y)
+        bottom_y = max(logical_start_y, logical_end_y)
+        
+        # Để căn giữa nút tròn có chiều rộng 36px:
+        button_x = center_x - 18
+        # Nút tròn cách mép dưới 8px:
+        button_y = bottom_y + 8
+        
+        # Đảm bảo nút không hiển thị ngoài màn hình bên trái
+        button_x = max(10, button_x)
+        
+        # Hiển thị nút tròn dịch nhanh ngay tại trung tâm bên dưới vùng bôi đen
+        self.pop_icon.show_at(text, button_x, button_y)
 
     def on_click_detected(self, x: int, y: int):
         """Xử lý khi phát hiện cú click chuột thường (để ẩn các popup nếu nhấp ra ngoài)."""
@@ -130,8 +209,17 @@ class TransMartApp:
             pos = QCursor.pos()
             x, y = pos.x(), pos.y()
             
+        # Đọc cấu hình ngôn ngữ thực tế
+        settings = settings_manager.load_settings()
+        src_key = settings.get("source_lang", "Auto")
+        tgt_key = settings.get("target_lang", "Vietnamese")
+        
+        from config.constants import SUPPORTED_LANGUAGES
+        src_display = SUPPORTED_LANGUAGES.get(src_key, src_key)
+        tgt_display = SUPPORTED_LANGUAGES.get(tgt_key, tgt_key)
+            
         # 1. Hiển thị bảng dịch nổi ở trạng thái 'Loading...' ngay lập tức (Tối ưu hóa UX)
-        self.pop_translation.show_loading(text, x, y, source_lang="Tự động", target_lang="Tiếng Việt")
+        self.pop_translation.show_loading(text, x, y, source_lang=src_display, target_lang=tgt_display)
         
         # 2. Giả lập độ trễ dịch AI 800ms để kiểm tra giao diện (Loading Spinner)
         # Ở các nhánh sau, chúng ta sẽ gọi API Gemini/OpenAI trong QThread ở đây.

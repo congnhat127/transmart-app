@@ -57,8 +57,8 @@ class PopIconWidget(QPushButton):
             
         self.selected_text = text
         
-        # Đặt nút ở góc dưới bên phải của tọa độ bên phải cùng của văn bản được chọn
-        self.move(x + 5, y + 5)
+        # Đặt nút ở vị trí chính xác được truyền từ controller
+        self.move(x, y)
         self.show()
         
         # Bắt đầu đếm ngược 3 giây để tự động ẩn nếu người dùng không tương tác
