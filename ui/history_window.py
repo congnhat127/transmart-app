@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
     QListWidget, QListWidgetItem, QPushButton, QTextEdit, QMessageBox
 )
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QEvent
 from PyQt6.QtGui import QFont
 
 class HistoryWindow(QWidget):
@@ -324,3 +324,10 @@ class HistoryWindow(QWidget):
                     background-color: #CCCCCC;
                 }
             """)
+
+    def changeEvent(self, event):
+        """Ẩn cửa sổ lịch sử nếu người dùng click ra ngoài (mất focus)."""
+        if event and event.type() == QEvent.Type.ActivationChange:
+            if not self.isActiveWindow():
+                self.hide()
+        super().changeEvent(event)

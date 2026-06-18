@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
     QComboBox, QSpinBox, QPushButton, QTabWidget, QFormLayout, QGroupBox
 )
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QEvent
 from PyQt6.QtGui import QFont
 from config.settings import settings_manager
 from config.constants import SUPPORTED_LANGUAGES
@@ -374,3 +374,10 @@ class SettingsWindow(QWidget):
                     color: #1A1A1A;
                 }
             """)
+
+    def changeEvent(self, event):
+        """Ẩn cửa sổ cài đặt nếu người dùng click ra ngoài (mất focus)."""
+        if event and event.type() == QEvent.Type.ActivationChange:
+            if not self.isActiveWindow():
+                self.hide()
+        super().changeEvent(event)

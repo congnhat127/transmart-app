@@ -1,5 +1,29 @@
 # ui/styles.py
 # Định nghĩa các hàm trả về chuỗi QSS (stylesheets) cho giao diện với thiết kế Glassmorphism
+from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont
+from PyQt6.QtCore import Qt
+
+def create_tray_icon() -> QIcon:
+    """Tạo một icon động hình tròn màu xanh với chữ T màu trắng cho System Tray."""
+    pixmap = QPixmap(32, 32)
+    pixmap.fill(QColor(0, 0, 0, 0))
+    
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    
+    # Vẽ nền hình tròn màu xanh accent (#0078D4)
+    painter.setBrush(QColor(0, 120, 212))
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.drawEllipse(2, 2, 28, 28)
+    
+    # Vẽ chữ "T" màu trắng ở giữa
+    painter.setPen(QColor(255, 255, 255))
+    font = QFont("Segoe UI", 16, QFont.Weight.Bold)
+    painter.setFont(font)
+    painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, "T")
+    
+    painter.end()
+    return QIcon(pixmap)
 
 def get_pop_icon_style(theme: str) -> str:
     """Trả về CSS cho nút dịch nhanh hình tròn nổi."""
