@@ -1,8 +1,8 @@
 import os
 import sys
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
 from PyQt6.QtCore import QTimer, QThread, pyqtSignal, QPoint
-from PyQt6.QtGui import QCursor
+from PyQt6.QtGui import QCursor, QAction
 
 from config.settings import settings_manager
 from config.history_manager import history_manager
@@ -11,6 +11,7 @@ from ui.pop_icon import PopIconWidget
 from ui.pop_translation import PopTranslationWidget
 from ui.settings_window import SettingsWindow
 from ui.history_window import HistoryWindow
+from ui.styles import create_tray_icon
 from services.ai_service import AIService
 from services.tts_service import TTSService
 
@@ -79,6 +80,9 @@ class TransMartApp:
         # - Đồng bộ cấu hình khi người dùng lưu cài đặt mới
         self.settings_window.settings_saved.connect(self.on_settings_saved)
 
+        # 6. Khởi tạo System Tray Icon (Biểu tượng khay hệ thống)
+        self._init_tray_icon()
+
     def start(self):
         """Khởi chạy bộ lắng nghe sự kiện hệ thống ngầm."""
         hotkey = self.settings.get("hotkey", "alt+z")
@@ -92,6 +96,8 @@ class TransMartApp:
         self.pop_translation.close()
         self.settings_window.close()
         self.history_window.close()
+        if hasattr(self, "tray_icon"):
+            self.tray_icon.hide()
         if self.translation_thread and self.translation_thread.isRunning():
             self.translation_thread.terminate()
             self.translation_thread.wait()
@@ -110,22 +116,18 @@ class TransMartApp:
 
     def on_click_detected(self, x: int, y: int):
         """Ẩn các cửa sổ nổi nếu click ra ngoài phạm vi."""
-        screen = QApplication.primaryScreen()
-        dpi_scale = screen.devicePixelRatio() if screen else 1.0
-        logical_x = int(x / dpi_scale)
-        logical_y = int(y / dpi_scale)
-        
-        click_point = QPoint(logical_x, logical_y)
+        # Lấy trực tiếp tọa độ con trỏ chuột từ Qt ở dạng logic để tránh sai lệch DPI
+        click_point = QCursor.pos()
         
         # Ẩn nút tròn nếu nhấp chuột ra ngoài
         if self.pop_icon.isVisible():
-            if not self.pop_icon.geometry().contains(click_point):
+            if not self.pop_icon.frameGeometry().contains(click_point):
                 self.pop_icon.hide()
                 
         # Ẩn bảng dịch nếu click ra ngoài (chỉ ẩn khi không có cửa sổ phụ nào đang hiện)
         if self.pop_translation.isVisible():
             if not self.settings_window.isVisible() and not self.history_window.isVisible():
-                if not self.pop_translation.geometry().contains(click_point):
+                if not self.pop_translation.frameGeometry().contains(click_point):
                     self.pop_translation.hide()
 
     def on_translation_triggered(self, text: str):
@@ -159,6 +161,13 @@ class TransMartApp:
         # 1. Hiển thị trạng thái Loading tức thời để tăng trải nghiệm người dùng
         self.pop_translation.show_loading(text, x, y, source_lang=ui_src, target_lang=ui_tgt)
         
+        # 1.5. Kiểm tra Cache cục bộ trước khi gọi AI để đạt tốc độ tức thời (0ms)
+        cached_record = history_manager.find_cached_record(text, target_lang)
+        if cached_record:
+            print(f"[DEBUG] Tìm thấy bản dịch trùng khớp trong Cache (0ms) cho: '{text[:20]}...'")
+            self.display_translation_result(text, cached_record, save_to_history=False)
+            return
+
         # 2. Hủy luồng dịch cũ nếu đang chạy trước đó
         if self.translation_thread and self.translation_thread.isRunning():
             self.translation_thread.terminate()
@@ -170,17 +179,26 @@ class TransMartApp:
         self.translation_thread.start()
 
     def on_translation_finished(self, text: str, result: dict):
-        """Hiển thị kết quả dịch và ghi nhận vào lịch sử dịch thuật."""
+        """Callback khi luồng dịch thuật AI hoàn thành."""
+        self.display_translation_result(text, result, save_to_history=True)
+
+    def display_translation_result(self, text: str, result: dict, save_to_history: bool = True):
+        """Hiển thị kết quả dịch lên popup và ghi vào lịch sử nếu cần."""
         # 1. Đổ kết quả vào bảng dịch nổi
         self.pop_translation.display_result(text, result)
         
+        if not save_to_history:
+            return
+            
         # 2. Lưu vào lịch sử dịch (tránh lưu nếu kết quả dịch báo lỗi chưa cấu hình hoặc lỗi kết nối)
         translation = result.get("translation", "")
         explanation = result.get("explanation", "")
+        summary = result.get("summary", "")
         detected_lang = result.get("detected_lang", "unknown")
+        target_lang = self.settings.get("target_lang", "Vietnamese")
         
         if "Chưa cấu hình" not in translation and "đã xảy ra lỗi" not in translation.lower():
-            history_manager.add_record(text, translation, explanation, detected_lang)
+            history_manager.add_record(text, translation, explanation, detected_lang, target_lang, summary)
             # Tải lại danh sách lịch sử nếu cửa sổ lịch sử đang mở để cập nhật dữ liệu mới nhất
             if self.history_window.isVisible():
                 self.history_window.load_history()
@@ -233,3 +251,41 @@ class TransMartApp:
         ocr_hotkey = self.settings.get("ocr_hotkey", "alt+q")
         self.listener.stop()
         self.listener.start(hotkey=hotkey, ocr_hotkey=ocr_hotkey)
+
+    def _init_tray_icon(self):
+        self.tray_icon = QSystemTrayIcon()
+        self.tray_icon.setIcon(create_tray_icon())
+        self.tray_icon.setToolTip("TransMart - Dịch thuật thông minh")
+        
+        # Tạo menu chuột phải cho khay hệ thống
+        tray_menu = QMenu()
+        
+        action_settings = QAction("⚙️ Cài đặt", self.settings_window)
+        action_settings.triggered.connect(self.on_settings_triggered)
+        tray_menu.addAction(action_settings)
+        
+        action_history = QAction("📋 Lịch sử dịch", self.history_window)
+        action_history.triggered.connect(self.on_history_triggered)
+        tray_menu.addAction(action_history)
+        
+        tray_menu.addSeparator()
+        
+        action_exit = QAction("❌ Thoát ứng dụng", self.settings_window)
+        action_exit.triggered.connect(self.exit_app)
+        tray_menu.addAction(action_exit)
+        
+        self.tray_icon.setContextMenu(tray_menu)
+        self.tray_icon.show()
+        
+        # Click hoặc Double click vào tray icon ➔ Mở cài đặt
+        self.tray_icon.activated.connect(self.on_tray_activated)
+
+    def on_tray_activated(self, reason):
+        if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
+            self.on_settings_triggered()
+
+    def exit_app(self):
+        print("\n[Hệ thống] Thoát ứng dụng từ Khay hệ thống...")
+        self.stop()
+        QApplication.quit()
+        sys.exit(0)

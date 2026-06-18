@@ -25,7 +25,7 @@ class HistoryManager:
             self.history = []
         return self.history
 
-    def add_record(self, source: str, translation: str, explanation: str, detected_lang: str) -> bool:
+    def add_record(self, source: str, translation: str, explanation: str, detected_lang: str, target_lang: str = "Vietnamese", summary: str = "") -> bool:
         """
         Thêm một bản ghi dịch thuật mới vào lịch sử.
         Bản ghi mới sẽ được đưa lên đầu danh sách để dễ theo dõi.
@@ -37,7 +37,9 @@ class HistoryManager:
             "source": source.strip(),
             "translation": translation.strip(),
             "explanation": explanation.strip(),
+            "summary": summary.strip(),
             "detected_lang": detected_lang,
+            "target_lang": target_lang.strip(),
             "timestamp": time.time()
         }
         
@@ -49,6 +51,16 @@ class HistoryManager:
             self.history = self.history[:500]
             
         return self.save_history()
+
+    def find_cached_record(self, source: str, target_lang: str) -> dict:
+        """Tìm bản ghi dịch thuật trùng khớp trong lịch sử để sử dụng làm bộ nhớ đệm (Cache)."""
+        src_clean = source.strip().lower()
+        tgt_clean = target_lang.strip().lower()
+        for record in self.history:
+            # So khớp cả văn bản gốc và ngôn ngữ đích mong muốn
+            if record.get("source", "").lower() == src_clean and record.get("target_lang", "vietnamese").lower() == tgt_clean:
+                return record
+        return None
 
     def delete_record(self, index: int) -> bool:
         """Xóa một bản ghi dịch thuật theo chỉ mục."""

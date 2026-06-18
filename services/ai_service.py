@@ -27,6 +27,7 @@ You MUST respond ONLY with a valid JSON object matching the following structure:
 {{
   "translation": "Only the translated text. Maintain formatting if applicable.",
   "explanation": "A very brief explanation (1-2 sentences) of any key vocabulary, idioms, grammar points, or cultural context from the source text (written in the target language). If the text is simple, this can be empty or a simple note.",
+  "summary": "If the source text is long (more than 30 words), provide a 1-sentence summary of the main idea in the target language. Otherwise, leave it as an empty string.",
   "detected_lang": "The 2-letter ISO code of the detected source language (e.g., 'en', 'ja', 'ko', 'zh')."
 }}
 
