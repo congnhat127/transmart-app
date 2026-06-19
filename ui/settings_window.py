@@ -156,7 +156,7 @@ class SettingsWindow(QWidget):
         self.cancel_btn = QPushButton("Hủy")
         self.cancel_btn.setObjectName("CancelBtn")
         self.cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.cancel_btn.clicked.connect(self.close)
+        self.cancel_btn.clicked.connect(self.cancel_changes)
         
         footer_buttons.addStretch()
         footer_buttons.addWidget(self.cancel_btn)
@@ -217,6 +217,11 @@ class SettingsWindow(QWidget):
         
         settings_manager.save_settings(new_settings)
         self.settings_saved.emit()
+        self.close()
+
+    def cancel_changes(self):
+        """Hủy bỏ thay đổi bằng cách nạp lại cấu hình cũ từ ổ đĩa và đóng cửa sổ."""
+        self.load_values()
         self.close()
 
     def _apply_style(self):
@@ -379,5 +384,5 @@ class SettingsWindow(QWidget):
         """Ẩn cửa sổ cài đặt nếu người dùng click ra ngoài (mất focus)."""
         if event and event.type() == QEvent.Type.ActivationChange:
             if not self.isActiveWindow():
-                self.hide()
+                self.save_values()
         super().changeEvent(event)
