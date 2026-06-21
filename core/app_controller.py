@@ -116,19 +116,11 @@ class TransMartApp:
 
     def on_click_detected(self, x: int, y: int):
         """Ẩn các cửa sổ nổi nếu click ra ngoài phạm vi."""
-        # Lấy trực tiếp tọa độ con trỏ chuột từ Qt ở dạng logic để tránh sai lệch DPI
-        click_point = QCursor.pos()
-        
         # Ẩn nút tròn nếu nhấp chuột ra ngoài
         if self.pop_icon.isVisible():
+            click_point = QCursor.pos()
             if not self.pop_icon.frameGeometry().contains(click_point):
                 self.pop_icon.hide()
-                
-        # Ẩn bảng dịch nếu click ra ngoài (chỉ ẩn khi không có cửa sổ phụ nào đang hiện)
-        if self.pop_translation.isVisible():
-            if not self.settings_window.isVisible() and not self.history_window.isVisible():
-                if not self.pop_translation.frameGeometry().contains(click_point):
-                    self.pop_translation.hide()
 
     def on_translation_triggered(self, text: str):
         """Dịch trực tiếp khi nhấn Alt+Z."""

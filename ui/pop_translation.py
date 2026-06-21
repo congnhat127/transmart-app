@@ -241,4 +241,13 @@ class PopTranslationWidget(QWidget):
         """Xử lý sự kiện click nút Cài đặt."""
         self.settings_triggered.emit()
 
-    # (Gỡ bỏ các sự kiện di chuyển cửa sổ tùy chỉnh vì Windows đã quản lý thông qua thanh tiêu đề mặc định)
+    def changeEvent(self, event):
+        """Ẩn bảng dịch nếu click ra ngoài ứng dụng (mất focus)."""
+        if event and event.type() == QEvent.Type.ActivationChange:
+            if not self.isActiveWindow():
+                from PyQt6.QtWidgets import QApplication
+                active_win = QApplication.activeWindow()
+                # Chỉ ẩn khi click ra ngoài ứng dụng hoàn toàn (activeWindow() là None)
+                if active_win is None:
+                    self.hide()
+        super().changeEvent(event)
