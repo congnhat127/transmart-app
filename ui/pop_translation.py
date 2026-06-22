@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButt
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QTimer, QEvent
 from PyQt6.QtGui import QMouseEvent, QFont
 
-from ui.styles import get_translation_popup_style
+from ui.styles import get_translation_popup_style, create_tray_icon
 
 class PopTranslationWidget(QWidget):
     """
@@ -28,13 +28,14 @@ class PopTranslationWidget(QWidget):
         self.drag_position = None
         self.target_lang_code = "vi" # Mặc định ngôn ngữ đích là tiếng Việt
         
-        # 1. Cấu hình đặc tính cửa sổ nổi
         self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint |      # Bỏ viền Windows
-            Qt.WindowType.WindowStaysOnTopHint |     # Luôn hiển thị trên cùng
-            Qt.WindowType.Tool                       # Không hiện ở Taskbar
+            Qt.WindowType.Window | 
+            Qt.WindowType.WindowCloseButtonHint | 
+            Qt.WindowType.WindowMinimizeButtonHint |
+            Qt.WindowType.WindowStaysOnTopHint
         )
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground) # Trong suốt nền
+        self.setWindowTitle("TransMart - Dịch nhanh")
+        self.setWindowIcon(create_tray_icon())
         
         # 2. Xây dựng giao diện
         self._init_ui()
@@ -56,7 +57,7 @@ class PopTranslationWidget(QWidget):
         card_layout.setContentsMargins(12, 12, 12, 12)
         card_layout.setSpacing(8)
         
-        # --- HEADER LAYOUT (Tiêu đề ngôn ngữ & Nút đóng) ---
+        # --- HEADER LAYOUT (Tiêu đề ngôn ngữ) ---
         header_layout = QHBoxLayout()
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(6)
@@ -64,34 +65,8 @@ class PopTranslationWidget(QWidget):
         self.lang_label = QLabel("ĐANG DỊCH...")
         self.lang_label.setObjectName("LangLabel")
         
-        # Nút thu nhỏ (Minimize)
-        self.minimize_btn = QPushButton("\uE921")
-        self.minimize_btn.setObjectName("MinBtn")
-        self.minimize_btn.setFixedSize(24, 24)
-        self.minimize_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.minimize_btn.setToolTip("Thu nhỏ ứng dụng")
-        self.minimize_btn.clicked.connect(self.showMinimized)
-        
-        # Nút phóng to / đổi kích thước (Disabled)
-        self.maximize_btn = QPushButton("\uE922")
-        self.maximize_btn.setObjectName("MaxBtn")
-        self.maximize_btn.setFixedSize(24, 24)
-        self.maximize_btn.setEnabled(False)
-        self.maximize_btn.setToolTip("Phóng to (Không khả dụng)")
-        
-        # Nút đóng (Close)
-        self.close_btn = QPushButton("\uE8BB")
-        self.close_btn.setObjectName("CloseBtn")
-        self.close_btn.setFixedSize(24, 24)
-        self.close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.close_btn.setToolTip("Đóng")
-        self.close_btn.clicked.connect(self.hide)
-        
         header_layout.addWidget(self.lang_label)
         header_layout.addStretch()
-        header_layout.addWidget(self.minimize_btn)
-        header_layout.addWidget(self.maximize_btn)
-        header_layout.addWidget(self.close_btn)
         
         # --- BODY LAYOUT (Văn bản gốc & Văn bản dịch) ---
         # Ô chứa văn bản gốc (Nhỏ hơn)
@@ -203,6 +178,7 @@ class PopTranslationWidget(QWidget):
         
         translation = result_dict.get("translation", "")
         explanation = result_dict.get("explanation", "")
+        summary = result_dict.get("summary", "")
         detected_lang = result_dict.get("detected_lang", "")
         
         # Cập nhật tiêu đề ngôn ngữ nếu có thông tin phát hiện ngôn ngữ tự động
@@ -212,6 +188,8 @@ class PopTranslationWidget(QWidget):
             
         # Định dạng văn bản hiển thị đẹp mắt
         display_html = f"<b>Bản dịch:</b><br>{translation}"
+        if summary:
+            display_html += f"<br><br><b>Tóm tắt chính:</b><br>{summary}"
         if explanation:
             display_html += f"<br><br><b>Giải thích chi tiết:</b><br>{explanation.replace(chr(10), '<br>')}"
             
@@ -263,27 +241,13 @@ class PopTranslationWidget(QWidget):
         """Xử lý sự kiện click nút Cài đặt."""
         self.settings_triggered.emit()
 
-    # === Các sự kiện đè chuột kéo để di chuyển cửa sổ (Window Dragging) ===
-    
-    def mousePressEvent(self, event: QMouseEvent):
-        if event.button() == Qt.MouseButton.LeftButton:
-            # Ghi lại vị trí tương đối của chuột so với góc trái cửa sổ
-            self.drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
-            event.accept()
-
-    def mouseMoveEvent(self, event: QMouseEvent):
-        if event.buttons() == Qt.MouseButton.LeftButton and self.drag_position is not None:
-            # Cập nhật vị trí cửa sổ theo chuyển động chuột
-            self.move(event.globalPosition().toPoint() - self.drag_position)
-            event.accept()
-
-    def mouseReleaseEvent(self, event: QMouseEvent):
-        self.drag_position = None
-        event.accept()
-
     def changeEvent(self, event):
-        """Ẩn bảng dịch nổi nếu người dùng click ra ngoài (mất focus)."""
+        """Ẩn bảng dịch nếu click ra ngoài ứng dụng (mất focus)."""
         if event and event.type() == QEvent.Type.ActivationChange:
             if not self.isActiveWindow():
-                self.hide()
+                from PyQt6.QtWidgets import QApplication
+                active_win = QApplication.activeWindow()
+                # Chỉ ẩn khi click ra ngoài ứng dụng hoàn toàn (activeWindow() là None)
+                if active_win is None:
+                    self.hide()
         super().changeEvent(event)
