@@ -72,6 +72,9 @@ class TransMartApp:
         # - Bảng dịch phát âm click ➔ Gọi TTS Service
         self.pop_translation.speak_triggered.connect(self.on_speak_triggered)
         
+        # - Bảng dịch thay đổi nội dung gốc ➔ Dịch lại bất đồng bộ
+        self.pop_translation.translation_requested.connect(self.on_translation_requested)
+        
         # - Footer buttons click ➔ Mở các cửa sổ chức năng tương ứng
         self.pop_translation.history_triggered.connect(self.on_history_triggered)
         self.pop_translation.api_triggered.connect(self.on_api_triggered)
@@ -174,10 +177,39 @@ class TransMartApp:
         """Callback khi luồng dịch thuật AI hoàn thành."""
         self.display_translation_result(text, result, save_to_history=True)
 
+    def on_translation_requested(self, text: str):
+        """Dịch lại khi người dùng sửa nội dung văn bản gốc trực tiếp trên popup."""
+        if not text.strip():
+            return
+            
+        source_lang = self.settings.get("source_lang", "Auto")
+        target_lang = self.settings.get("target_lang", "Vietnamese")
+        
+        # Chỉ hiển thị trạng thái loading cho ô dịch, không thay đổi ô nhập gốc
+        self.pop_translation.show_translation_loading()
+        
+        # Kiểm tra Cache cục bộ
+        cached_record = history_manager.find_cached_record(text, target_lang)
+        if cached_record:
+            print(f"[DEBUG] Tìm thấy bản dịch trùng khớp trong Cache (0ms) cho văn bản sửa: '{text[:20]}...'")
+            self.display_translation_result(text, cached_record, save_to_history=False)
+            return
+            
+        # Hủy luồng dịch cũ nếu có
+        if self.translation_thread and self.translation_thread.isRunning():
+            self.translation_thread.terminate()
+            self.translation_thread.wait()
+            
+        # Tạo luồng dịch mới
+        self.translation_thread = TranslationThread(self.ai_service, text, source_lang, target_lang)
+        self.translation_thread.translation_finished.connect(self.on_translation_finished)
+        self.translation_thread.start()
+
     def display_translation_result(self, text: str, result: dict, save_to_history: bool = True):
         """Hiển thị kết quả dịch lên popup và ghi vào lịch sử nếu cần."""
         # 1. Đổ kết quả vào bảng dịch nổi
-        self.pop_translation.display_result(text, result)
+        target_lang = self.settings.get("target_lang", "Vietnamese")
+        self.pop_translation.display_result(text, result, target_lang)
         
         if not save_to_history:
             return
