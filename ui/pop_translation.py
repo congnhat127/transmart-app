@@ -1,8 +1,9 @@
 # ui/pop_translation.py
+import time
 import pyperclip
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTextEdit, QFrame
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QTimer, QEvent
-from PyQt6.QtGui import QMouseEvent, QFont
+from PyQt6.QtGui import QMouseEvent, QFont, QCursor
 
 from ui.styles import get_translation_popup_style, create_tray_icon
 
@@ -18,15 +19,28 @@ class PopTranslationWidget(QWidget):
     history_triggered = pyqtSignal()
     api_triggered = pyqtSignal()
     settings_triggered = pyqtSignal()
+    
+    # Tín hiệu yêu cầu dịch lại văn bản mới chỉnh sửa
+    translation_requested = pyqtSignal(str)
 
     def __init__(self, theme: str = "dark", font_size: int = 13):
         super().__init__()
         self.theme = theme
         self.font_size = font_size
+        self.is_updating_programmatically = False
+        
+        # Thiết lập timer debounce 800ms để tự động dịch khi người dùng dừng gõ
+        self.debounce_timer = QTimer(self)
+        self.debounce_timer.setSingleShot(True)
+        self.debounce_timer.timeout.connect(self._on_debounce_timeout)
         
         # Biến phục vụ di chuyển cửa sổ (Window Dragging)
         self.drag_position = None
         self.target_lang_code = "vi" # Mặc định ngôn ngữ đích là tiếng Việt
+        self.source_lang_code = "en" # Mặc định ngôn ngữ nguồn là tiếng Anh
+        self.source_text = ""
+        self.translation_text = ""
+        self.last_move_resize_time = 0.0
         
         self.setWindowFlags(
             Qt.WindowType.Window | 
@@ -71,9 +85,11 @@ class PopTranslationWidget(QWidget):
         # --- BODY LAYOUT (Văn bản gốc & Văn bản dịch) ---
         # Ô chứa văn bản gốc (Nhỏ hơn)
         self.source_text_edit = QTextEdit()
-        self.source_text_edit.setReadOnly(True)
-        self.source_text_edit.setPlaceholderText("Văn bản gốc...")
+        self.source_text_edit.setReadOnly(False)
+        self.source_text_edit.setPlaceholderText("Nhập hoặc chỉnh sửa văn bản gốc...")
         self.source_text_edit.setMaximumHeight(70)
+        self.source_text_edit.installEventFilter(self)
+        self.source_text_edit.textChanged.connect(self._on_source_text_changed)
         
         # Ô chứa văn bản dịch + giải thích (Rộng hơn)
         self.target_text_edit = QTextEdit()
@@ -92,8 +108,13 @@ class PopTranslationWidget(QWidget):
         self.copy_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.copy_btn.clicked.connect(self._on_copy_clicked)
         
-        # Nút Phát âm (TTS)
-        self.tts_btn = QPushButton("🔊 Phát âm")
+        # Nút Phát âm Bản gốc (TTS Source)
+        self.tts_src_btn = QPushButton("🔊 Đọc gốc")
+        self.tts_src_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.tts_src_btn.clicked.connect(self._on_tts_src_clicked)
+        
+        # Nút Phát âm Bản dịch (TTS Target)
+        self.tts_btn = QPushButton("🔊 Đọc dịch")
         self.tts_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.tts_btn.clicked.connect(self._on_tts_clicked)
         
@@ -132,6 +153,7 @@ class PopTranslationWidget(QWidget):
         brand_label.setStyleSheet("color: rgba(128, 128, 128, 0.6); font-size: 10px; font-weight: bold;")
         
         footer_layout.addWidget(self.copy_btn)
+        footer_layout.addWidget(self.tts_src_btn)
         footer_layout.addWidget(self.tts_btn)
         footer_layout.addWidget(self.history_btn)
         footer_layout.addWidget(self.api_btn)
@@ -153,7 +175,9 @@ class PopTranslationWidget(QWidget):
         Hiển thị hộp thoại ngay lập tức tại vị trí chuột ở trạng thái 'Đang dịch'.
         Giúp tăng trải nghiệm UX, người dùng biết app đang xử lý, không bị cảm giác đơ click.
         """
+        self.is_updating_programmatically = True
         self.source_text_edit.setPlainText(raw_text)
+        self.is_updating_programmatically = False
         self.target_text_edit.setPlainText("Đang dịch bằng AI, vui lòng chờ trong giây lát...")
         self.lang_label.setText(f"{source_lang.upper()} ➜ {target_lang.upper()}")
         
@@ -165,26 +189,51 @@ class PopTranslationWidget(QWidget):
         self.raise_()
         self.activateWindow()
 
-    def display_result(self, raw_text: str, result_dict: dict):
+    def display_result(self, raw_text: str, result_dict: dict, target_lang: str = "Vietnamese"):
         """
         Đổ kết quả dịch thuật chi tiết từ AI vào hộp thoại.
         
         Args:
             raw_text (str): Văn bản gốc.
             result_dict (dict): Từ điển kết quả dịch có cấu trúc từ AI.
-                                Ví dụ: {"translation": "...", "explanation": "..."}
+                                 Ví dụ: {"translation": "...", "explanation": "..."}
+            target_lang (str): Tên ngôn ngữ đích cài đặt.
         """
+        self.source_text = raw_text
+        self.is_updating_programmatically = True
         self.source_text_edit.setPlainText(raw_text)
+        self.is_updating_programmatically = False
         
         translation = result_dict.get("translation", "")
+        self.translation_text = translation
         explanation = result_dict.get("explanation", "")
         summary = result_dict.get("summary", "")
         detected_lang = result_dict.get("detected_lang", "")
         
-        # Cập nhật tiêu đề ngôn ngữ nếu có thông tin phát hiện ngôn ngữ tự động
+        # Ánh xạ ngôn ngữ đích sang mã ngôn ngữ
+        lang_to_code = {
+            "Vietnamese": "vi",
+            "English": "en",
+            "Japanese": "ja",
+            "Korean": "ko",
+            "Chinese": "zh",
+            "French": "fr",
+            "German": "de",
+            "Spanish": "es",
+            "Russian": "ru"
+        }
+        self.target_lang_code = lang_to_code.get(target_lang, "vi")
+        self.source_lang_code = detected_lang.lower() if detected_lang else "en"
+        
+        # Get target language friendly name
+        from config.constants import SUPPORTED_LANGUAGES
+        target_lang_name = SUPPORTED_LANGUAGES.get(target_lang, target_lang).upper()
+        
+        # Cập nhật tiêu đề ngôn ngữ
         if detected_lang:
-            self.lang_label.setText(f"{detected_lang.upper()} ➜ TIẾNG VIỆT")
-            self.target_lang_code = "vi" # Đặt ngôn ngữ đọc cho TTS
+            self.lang_label.setText(f"{detected_lang.upper()} ➜ {target_lang_name}")
+        else:
+            self.lang_label.setText(f"AI ➜ {target_lang_name}")
             
         # Định dạng văn bản hiển thị đẹp mắt
         display_html = f"<b>Bản dịch:</b><br>{translation}"
@@ -218,16 +267,13 @@ class PopTranslationWidget(QWidget):
 
     def _on_tts_clicked(self):
         """Xử lý phát âm văn bản dịch."""
-        translated_text = self.target_text_edit.toPlainText()
-        if "Bản dịch:" in translated_text:
-            translated_text = translated_text.split("Bản dịch:\n")[-1]
-        if "Giải thích chi tiết:" in translated_text:
-            translated_text = translated_text.split("\n\nGiải thích chi tiết:")[0]
-            
-        text_to_read = translated_text.strip()
-        if text_to_read:
-            # Phát tín hiệu yêu cầu controller xử lý đọc bằng Edge TTS
-            self.speak_triggered.emit(text_to_read, self.target_lang_code)
+        if hasattr(self, "translation_text") and self.translation_text:
+            self.speak_triggered.emit(self.translation_text.strip(), self.target_lang_code)
+
+    def _on_tts_src_clicked(self):
+        """Xử lý phát âm văn bản gốc."""
+        if hasattr(self, "source_text") and self.source_text:
+            self.speak_triggered.emit(self.source_text.strip(), self.source_lang_code)
 
     def _on_history_clicked(self):
         """Xử lý sự kiện click nút Lịch sử dịch."""
@@ -241,13 +287,86 @@ class PopTranslationWidget(QWidget):
         """Xử lý sự kiện click nút Cài đặt."""
         self.settings_triggered.emit()
 
+    def moveEvent(self, event):
+        self.last_move_resize_time = time.time()
+        super().moveEvent(event)
+
+    def resizeEvent(self, event):
+        self.last_move_resize_time = time.time()
+        super().resizeEvent(event)
+
     def changeEvent(self, event):
         """Ẩn bảng dịch nếu click ra ngoài ứng dụng (mất focus)."""
         if event and event.type() == QEvent.Type.ActivationChange:
             if not self.isActiveWindow():
                 from PyQt6.QtWidgets import QApplication
+                # Kiểm tra xem có đang giữ chuột trái (đang kéo) hoặc đã phóng to/Aero Snap không
+                if QApplication.mouseButtons() & Qt.MouseButton.LeftButton or self.isMaximized():
+                    event.accept()
+                    return
+                    
+                # Bỏ qua ẩn nếu vừa xảy ra kéo cửa sổ hoặc Aero Snap gần đây
+                if time.time() - self.last_move_resize_time < 1.0:
+                    event.accept()
+                    return
+                    
+                # Kiểm tra xem con trỏ chuột hoặc vị trí cửa sổ có sát rìa màn hình không
+                cursor_pos = QCursor.pos()
+                screen = QApplication.screenAt(cursor_pos)
+                if not screen:
+                    screen = self.screen()
+                if screen:
+                    geom = screen.geometry()
+                    margin = 40
+                    # Con trỏ chuột ở sát rìa
+                    if (abs(cursor_pos.x() - geom.left()) < margin or
+                        abs(cursor_pos.x() - geom.right()) < margin or
+                        abs(cursor_pos.y() - geom.top()) < margin or
+                        abs(cursor_pos.y() - geom.bottom()) < margin):
+                        event.accept()
+                        return
+                    # Khung cửa sổ ở sát hoặc vượt ngoài màn hình
+                    win_geom = self.frameGeometry()
+                    if (abs(win_geom.left() - geom.left()) < margin or
+                        abs(win_geom.right() - geom.right()) < margin or
+                        abs(win_geom.top() - geom.top()) < margin or
+                        abs(win_geom.bottom() - geom.bottom()) < margin or
+                        win_geom.left() < geom.left() or
+                        win_geom.right() > geom.right() or
+                        win_geom.top() < geom.top() or
+                        win_geom.bottom() > geom.bottom()):
+                        event.accept()
+                        return
+
                 active_win = QApplication.activeWindow()
                 # Chỉ ẩn khi click ra ngoài ứng dụng hoàn toàn (activeWindow() là None)
                 if active_win is None:
                     self.hide()
         super().changeEvent(event)
+
+    def show_translation_loading(self):
+        """Hiển thị trạng thái loading chỉ riêng cho ô kết quả dịch (khi người dùng đang tự gõ)."""
+        self.target_text_edit.setPlainText("Đang dịch bằng AI, vui lòng chờ trong giây lát...")
+
+    def _on_source_text_changed(self):
+        if self.is_updating_programmatically:
+            return
+        # Bắt đầu đếm ngược debounce 800ms
+        self.debounce_timer.start(800)
+
+    def _on_debounce_timeout(self):
+        text = self.source_text_edit.toPlainText().strip()
+        if text:
+            self.source_text = text
+            self.translation_requested.emit(text)
+
+    def eventFilter(self, obj, event):
+        if obj == self.source_text_edit and event and event.type() == QEvent.Type.KeyPress:
+            # Nếu nhấn Enter (không giữ Shift) hoặc Ctrl+Enter
+            if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                if event.modifiers() & Qt.KeyboardModifier.ControlModifier or not (event.modifiers() & Qt.KeyboardModifier.ShiftModifier):
+                    # Kích hoạt dịch ngay lập tức
+                    self.debounce_timer.stop()
+                    self._on_debounce_timeout()
+                    return True # Đã xử lý sự kiện
+        return super().eventFilter(obj, event)
