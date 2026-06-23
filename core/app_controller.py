@@ -1,7 +1,8 @@
 import os
 import sys
+import time
 from PyQt6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
-from PyQt6.QtCore import QTimer, QThread, pyqtSignal, QPoint
+from PyQt6.QtCore import QTimer, QThread, pyqtSignal, QPoint, Qt
 from PyQt6.QtGui import QCursor, QAction
 
 from config.settings import settings_manager
@@ -82,6 +83,9 @@ class TransMartApp:
 
         # - Đồng bộ cấu hình khi người dùng lưu cài đặt mới
         self.settings_window.settings_saved.connect(self.on_settings_saved)
+
+        # - Theo dõi trạng thái hoạt động của toàn bộ ứng dụng (lấy/mất focus khỏi hệ thống)
+        QApplication.instance().applicationStateChanged.connect(self.on_application_state_changed)
 
         # 6. Khởi tạo System Tray Icon (Biểu tượng khay hệ thống)
         self._init_tray_icon()
@@ -236,7 +240,11 @@ class TransMartApp:
         self.history_window.theme = self.theme
         self.history_window._apply_style()
         self.history_window.load_history()
-        self.history_window.show()
+        self.history_window.last_shown_time = time.time()
+        if self.history_window.isMinimized():
+            self.history_window.showNormal()
+        else:
+            self.history_window.show()
         self.history_window.raise_()
         self.history_window.activateWindow()
 
@@ -246,7 +254,11 @@ class TransMartApp:
         self.settings_window._apply_style()
         self.settings_window.load_values()
         self.settings_window.tabs.setCurrentIndex(1)
-        self.settings_window.show()
+        self.settings_window.last_shown_time = time.time()
+        if self.settings_window.isMinimized():
+            self.settings_window.showNormal()
+        else:
+            self.settings_window.show()
         self.settings_window.raise_()
         self.settings_window.activateWindow()
 
@@ -256,7 +268,11 @@ class TransMartApp:
         self.settings_window._apply_style()
         self.settings_window.load_values()
         self.settings_window.tabs.setCurrentIndex(0)
-        self.settings_window.show()
+        self.settings_window.last_shown_time = time.time()
+        if self.settings_window.isMinimized():
+            self.settings_window.showNormal()
+        else:
+            self.settings_window.show()
         self.settings_window.raise_()
         self.settings_window.activateWindow()
 
@@ -313,3 +329,34 @@ class TransMartApp:
         self.stop()
         QApplication.quit()
         sys.exit(0)
+
+    def on_application_state_changed(self, state):
+        """Xử lý sự kiện khi toàn bộ ứng dụng mất focus (người dùng click ra ứng dụng khác hoặc Desktop)."""
+        if state == Qt.ApplicationState.ApplicationInactive:
+            import time
+            now = time.time()
+            # Bỏ qua nếu có bất kỳ cửa sổ nào vừa mới được mở/khôi phục trong vòng 500ms
+            if now - getattr(self.pop_translation, "last_shown_time", 0.0) < 0.5:
+                return
+            if now - getattr(self.settings_window, "last_shown_time", 0.0) < 0.5:
+                return
+            if now - getattr(self.history_window, "last_shown_time", 0.0) < 0.5:
+                return
+
+            # Nếu người dùng bấm nút thu nhỏ (Minimize) thủ công trên cửa sổ Cài đặt hoặc Lịch sử,
+            # cửa sổ đó đã phát sự kiện thu nhỏ gần đây. Chúng ta KHÔNG muốn thu nhỏ popup dịch theo.
+            if now - getattr(self.settings_window, "last_minimize_time", 0.0) < 0.5:
+                return
+            if now - getattr(self.history_window, "last_minimize_time", 0.0) < 0.5:
+                return
+            if now - getattr(self.pop_translation, "last_minimize_time", 0.0) < 0.5:
+                return
+
+            # Thu nhỏ tất cả các cửa sổ đang hiển thị xuống thanh Taskbar (do nhấp ra ngoài ứng dụng)
+            if self.pop_translation.isVisible() and not self.pop_translation.isMinimized():
+                self.pop_translation.showMinimized()
+            if self.settings_window.isVisible() and not self.settings_window.isMinimized():
+                self.settings_window.save_values(close_window=False)
+                self.settings_window.showMinimized()
+            if self.history_window.isVisible() and not self.history_window.isMinimized():
+                self.history_window.showMinimized()

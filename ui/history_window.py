@@ -345,8 +345,15 @@ class HistoryWindow(QWidget):
 
     def changeEvent(self, event):
         """Ẩn cửa sổ lịch sử nếu người dùng click ra ngoài (mất focus)."""
+        if event and event.type() == QEvent.Type.WindowStateChange:
+            if self.isMinimized():
+                self.last_minimize_time = time.time()
         if event and event.type() == QEvent.Type.ActivationChange:
             if not self.isActiveWindow():
+                # Bỏ qua nếu cửa sổ vừa mới được mở/khôi phục gần đây
+                if time.time() - getattr(self, "last_shown_time", 0.0) < 0.5:
+                    event.accept()
+                    return
                 # Kiểm tra xem có đang giữ chuột trái (đang kéo) hoặc đã phóng to/Aero Snap không
                 if QApplication.mouseButtons() & Qt.MouseButton.LeftButton or self.isMaximized():
                     event.accept()
@@ -385,5 +392,5 @@ class HistoryWindow(QWidget):
                         event.accept()
                         return
 
-                self.hide()
+                self.showMinimized()
         super().changeEvent(event)

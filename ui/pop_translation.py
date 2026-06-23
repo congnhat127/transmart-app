@@ -183,7 +183,11 @@ class PopTranslationWidget(QWidget):
         
         # Di chuyển hộp thoại đến vị trí chuột (lệch xuống dưới 20px)
         self.move(x + 10, y + 20)
-        self.show()
+        self.last_shown_time = time.time()
+        if self.isMinimized():
+            self.showNormal()
+        else:
+            self.show()
         
         # Đưa con trỏ chuột ra ngoài để người dùng có thể đọc ngay
         self.raise_()
@@ -297,8 +301,15 @@ class PopTranslationWidget(QWidget):
 
     def changeEvent(self, event):
         """Ẩn bảng dịch nếu click ra ngoài ứng dụng (mất focus)."""
+        if event and event.type() == QEvent.Type.WindowStateChange:
+            if self.isMinimized():
+                self.last_minimize_time = time.time()
         if event and event.type() == QEvent.Type.ActivationChange:
             if not self.isActiveWindow():
+                # Bỏ qua nếu cửa sổ vừa mới được mở/khôi phục gần đây
+                if time.time() - getattr(self, "last_shown_time", 0.0) < 0.5:
+                    event.accept()
+                    return
                 from PyQt6.QtWidgets import QApplication
                 # Kiểm tra xem có đang giữ chuột trái (đang kéo) hoặc đã phóng to/Aero Snap không
                 if QApplication.mouseButtons() & Qt.MouseButton.LeftButton or self.isMaximized():
@@ -339,9 +350,9 @@ class PopTranslationWidget(QWidget):
                         return
 
                 active_win = QApplication.activeWindow()
-                # Chỉ ẩn khi click ra ngoài ứng dụng hoàn toàn (activeWindow() là None)
+                # Chỉ thu nhỏ xuống thanh Taskbar khi click ra ngoài ứng dụng hoàn toàn (activeWindow() là None)
                 if active_win is None:
-                    self.hide()
+                    self.showMinimized()
         super().changeEvent(event)
 
     def show_translation_loading(self):

@@ -201,7 +201,7 @@ class SettingsWindow(QWidget):
         if idx_openai >= 0:
             self.openai_model_combo.setCurrentIndex(idx_openai)
 
-    def save_values(self):
+    def save_values(self, close_window: bool = True):
         """Lưu toàn bộ cài đặt từ UI xuống file settings.json."""
         theme_val = "dark" if self.theme_combo.currentIndex() == 0 else "light"
         
@@ -220,7 +220,8 @@ class SettingsWindow(QWidget):
         
         settings_manager.save_settings(new_settings)
         self.settings_saved.emit()
-        self.close()
+        if close_window:
+            self.close()
 
     def cancel_changes(self):
         """Hủy bỏ thay đổi bằng cách nạp lại cấu hình cũ từ ổ đĩa và đóng cửa sổ."""
@@ -393,8 +394,15 @@ class SettingsWindow(QWidget):
 
     def changeEvent(self, event):
         """Ẩn cửa sổ cài đặt nếu người dùng click ra ngoài (mất focus)."""
+        if event and event.type() == QEvent.Type.WindowStateChange:
+            if self.isMinimized():
+                self.last_minimize_time = time.time()
         if event and event.type() == QEvent.Type.ActivationChange:
             if not self.isActiveWindow():
+                # Bỏ qua nếu cửa sổ vừa mới được mở/khôi phục gần đây
+                if time.time() - getattr(self, "last_shown_time", 0.0) < 0.5:
+                    event.accept()
+                    return
                 # Kiểm tra xem có đang giữ chuột trái (đang kéo) hoặc đã phóng to/Aero Snap không
                 if QApplication.mouseButtons() & Qt.MouseButton.LeftButton or self.isMaximized():
                     event.accept()
@@ -433,5 +441,6 @@ class SettingsWindow(QWidget):
                         event.accept()
                         return
 
-                self.save_values()
+                self.save_values(close_window=False)
+                self.showMinimized()
         super().changeEvent(event)
