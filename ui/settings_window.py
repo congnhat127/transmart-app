@@ -1,10 +1,12 @@
 import os
+import time
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
-    QComboBox, QSpinBox, QPushButton, QTabWidget, QFormLayout, QGroupBox
+    QComboBox, QSpinBox, QPushButton, QTabWidget, QFormLayout, QGroupBox,
+    QApplication
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QEvent
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QCursor
 from config.settings import settings_manager
 from config.constants import SUPPORTED_LANGUAGES
 
@@ -18,6 +20,7 @@ class SettingsWindow(QWidget):
     def __init__(self, theme: str = "dark"):
         super().__init__()
         self.theme = theme
+        self.last_move_resize_time = 0.0
         self.setWindowTitle("TransMart - Cài đặt hệ thống")
         self.setMinimumSize(420, 480)
         self.resize(450, 500)
@@ -380,9 +383,55 @@ class SettingsWindow(QWidget):
                 }
             """)
 
+    def moveEvent(self, event):
+        self.last_move_resize_time = time.time()
+        super().moveEvent(event)
+
+    def resizeEvent(self, event):
+        self.last_move_resize_time = time.time()
+        super().resizeEvent(event)
+
     def changeEvent(self, event):
         """Ẩn cửa sổ cài đặt nếu người dùng click ra ngoài (mất focus)."""
         if event and event.type() == QEvent.Type.ActivationChange:
             if not self.isActiveWindow():
+                # Kiểm tra xem có đang giữ chuột trái (đang kéo) hoặc đã phóng to/Aero Snap không
+                if QApplication.mouseButtons() & Qt.MouseButton.LeftButton or self.isMaximized():
+                    event.accept()
+                    return
+
+                # Bỏ qua nếu vừa xảy ra kéo cửa sổ hoặc Aero Snap gần đây
+                if time.time() - self.last_move_resize_time < 1.0:
+                    event.accept()
+                    return
+
+                # Kiểm tra xem con trỏ chuột hoặc vị trí cửa sổ có sát rìa màn hình không
+                cursor_pos = QCursor.pos()
+                screen = QApplication.screenAt(cursor_pos)
+                if not screen:
+                    screen = self.screen()
+                if screen:
+                    geom = screen.geometry()
+                    margin = 40
+                    # Con trỏ chuột ở sát rìa
+                    if (abs(cursor_pos.x() - geom.left()) < margin or
+                        abs(cursor_pos.x() - geom.right()) < margin or
+                        abs(cursor_pos.y() - geom.top()) < margin or
+                        abs(cursor_pos.y() - geom.bottom()) < margin):
+                        event.accept()
+                        return
+                    # Khung cửa sổ ở sát hoặc vượt ngoài màn hình
+                    win_geom = self.frameGeometry()
+                    if (abs(win_geom.left() - geom.left()) < margin or
+                        abs(win_geom.right() - geom.right()) < margin or
+                        abs(win_geom.top() - geom.top()) < margin or
+                        abs(win_geom.bottom() - geom.bottom()) < margin or
+                        win_geom.left() < geom.left() or
+                        win_geom.right() > geom.right() or
+                        win_geom.top() < geom.top() or
+                        win_geom.bottom() > geom.bottom()):
+                        event.accept()
+                        return
+
                 self.save_values()
         super().changeEvent(event)
