@@ -85,6 +85,8 @@ class TransMartApp:
         self.settings_window.settings_saved.connect(self.on_settings_saved)
 
         # - Theo dõi trạng thái hoạt động của toàn bộ ứng dụng (lấy/mất focus khỏi hệ thống)
+        self.last_active_window = None
+        QApplication.instance().focusChanged.connect(self.on_focus_changed)
         QApplication.instance().applicationStateChanged.connect(self.on_application_state_changed)
 
         # 6. Khởi tạo System Tray Icon (Biểu tượng khay hệ thống)
@@ -159,6 +161,7 @@ class TransMartApp:
         
         # 1. Hiển thị trạng thái Loading tức thời để tăng trải nghiệm người dùng
         self.pop_translation.show_loading(text, x, y, source_lang=ui_src, target_lang=ui_tgt)
+        self.last_active_window = self.pop_translation
         
         # 1.5. Kiểm tra Cache cục bộ trước khi gọi AI để đạt tốc độ tức thời (0ms)
         cached_record = history_manager.find_cached_record(text, target_lang)
@@ -241,6 +244,7 @@ class TransMartApp:
         self.history_window._apply_style()
         self.history_window.load_history()
         self.history_window.last_shown_time = time.time()
+        self.last_active_window = self.history_window
         if self.history_window.isMinimized():
             self.history_window.showNormal()
         else:
@@ -255,6 +259,7 @@ class TransMartApp:
         self.settings_window.load_values()
         self.settings_window.tabs.setCurrentIndex(1)
         self.settings_window.last_shown_time = time.time()
+        self.last_active_window = self.settings_window
         if self.settings_window.isMinimized():
             self.settings_window.showNormal()
         else:
@@ -269,6 +274,7 @@ class TransMartApp:
         self.settings_window.load_values()
         self.settings_window.tabs.setCurrentIndex(0)
         self.settings_window.last_shown_time = time.time()
+        self.last_active_window = self.settings_window
         if self.settings_window.isMinimized():
             self.settings_window.showNormal()
         else:
@@ -330,6 +336,12 @@ class TransMartApp:
         QApplication.quit()
         sys.exit(0)
 
+    def on_focus_changed(self, old, now):
+        """Theo dõi cửa sổ hoạt động cuối cùng của ứng dụng."""
+        active = QApplication.activeWindow()
+        if active in (self.pop_translation, self.settings_window, self.history_window):
+            self.last_active_window = active
+
     def on_application_state_changed(self, state):
         """Xử lý sự kiện khi toàn bộ ứng dụng mất focus (người dùng click ra ứng dụng khác hoặc Desktop)."""
         print(f"[DEBUG] on_application_state_changed: state={state}")
@@ -356,21 +368,16 @@ class TransMartApp:
                 print("[DEBUG] Ignore because history was shown recently")
                 return
 
-            # Nếu người dùng bấm nút thu nhỏ (Minimize) thủ công trên cửa sổ Cài đặt hoặc Lịch sử,
-            # cửa sổ đó đã phát sự kiện thu nhỏ gần đây. Chúng ta KHÔNG muốn thu nhỏ popup dịch theo.
-            settings_min_diff = now - getattr(self.settings_window, "last_minimize_time", 0.0)
-            history_min_diff = now - getattr(self.history_window, "last_minimize_time", 0.0)
-            pop_min_diff = now - getattr(self.pop_translation, "last_minimize_time", 0.0)
-            print(f"[DEBUG] minimize diffs - settings: {settings_min_diff:.3f}s, history: {history_min_diff:.3f}s, pop: {pop_min_diff:.3f}s")
-            
-            if settings_min_diff < 0.5:
-                print("[DEBUG] Ignore because settings was minimized recently")
+            # Nếu tiêu điểm trước đó là một cửa sổ chức năng và cửa sổ đó đang thu nhỏ (do người dùng bấm nút Minimize thủ công),
+            # chúng ta KHÔNG tự động thu nhỏ các cửa sổ khác (như popup).
+            if self.last_active_window == self.settings_window and self.settings_window.isMinimized():
+                print("[DEBUG] Ignore because settings was active and is now minimized")
                 return
-            if history_min_diff < 0.5:
-                print("[DEBUG] Ignore because history was minimized recently")
+            if self.last_active_window == self.history_window and self.history_window.isMinimized():
+                print("[DEBUG] Ignore because history was active and is now minimized")
                 return
-            if pop_min_diff < 0.5:
-                print("[DEBUG] Ignore because pop was minimized recently")
+            if self.last_active_window == self.pop_translation and self.pop_translation.isMinimized():
+                print("[DEBUG] Ignore because pop was active and is now minimized")
                 return
 
             # Thu nhỏ tất cả các cửa sổ đang hiển thị xuống thanh Taskbar (do nhấp ra ngoài ứng dụng)
