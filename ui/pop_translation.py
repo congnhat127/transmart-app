@@ -256,6 +256,7 @@ class PopTranslationWidget(QWidget):
 
     def _on_copy_clicked(self):
         """Xử lý sự kiện sao chép bản dịch."""
+        import pyperclip
         # Lấy nội dung text thuần từ ô kết quả dịch
         translated_text = self.target_text_edit.toPlainText()
         # Nếu có chữ giải thích chi tiết, ta chỉ lấy phần bản dịch chính (trước dòng Giải thích)
@@ -304,55 +305,6 @@ class PopTranslationWidget(QWidget):
         if event and event.type() == QEvent.Type.WindowStateChange:
             if self.isMinimized():
                 self.last_minimize_time = time.time()
-        if event and event.type() == QEvent.Type.ActivationChange:
-            if not self.isActiveWindow():
-                # Bỏ qua nếu cửa sổ vừa mới được mở/khôi phục gần đây
-                if time.time() - getattr(self, "last_shown_time", 0.0) < 0.5:
-                    event.accept()
-                    return
-                from PyQt6.QtWidgets import QApplication
-                # Kiểm tra xem có đang giữ chuột trái (đang kéo) hoặc đã phóng to/Aero Snap không
-                if QApplication.mouseButtons() & Qt.MouseButton.LeftButton or self.isMaximized():
-                    event.accept()
-                    return
-                    
-                # Bỏ qua ẩn nếu vừa xảy ra kéo cửa sổ hoặc Aero Snap gần đây
-                if time.time() - self.last_move_resize_time < 1.0:
-                    event.accept()
-                    return
-                    
-                # Kiểm tra xem con trỏ chuột hoặc vị trí cửa sổ có sát rìa màn hình không
-                cursor_pos = QCursor.pos()
-                screen = QApplication.screenAt(cursor_pos)
-                if not screen:
-                    screen = self.screen()
-                if screen:
-                    geom = screen.geometry()
-                    margin = 40
-                    # Con trỏ chuột ở sát rìa
-                    if (abs(cursor_pos.x() - geom.left()) < margin or
-                        abs(cursor_pos.x() - geom.right()) < margin or
-                        abs(cursor_pos.y() - geom.top()) < margin or
-                        abs(cursor_pos.y() - geom.bottom()) < margin):
-                        event.accept()
-                        return
-                    # Khung cửa sổ ở sát hoặc vượt ngoài màn hình
-                    win_geom = self.frameGeometry()
-                    if (abs(win_geom.left() - geom.left()) < margin or
-                        abs(win_geom.right() - geom.right()) < margin or
-                        abs(win_geom.top() - geom.top()) < margin or
-                        abs(win_geom.bottom() - geom.bottom()) < margin or
-                        win_geom.left() < geom.left() or
-                        win_geom.right() > geom.right() or
-                        win_geom.top() < geom.top() or
-                        win_geom.bottom() > geom.bottom()):
-                        event.accept()
-                        return
-
-                active_win = QApplication.activeWindow()
-                # Chỉ thu nhỏ xuống thanh Taskbar khi click ra ngoài ứng dụng hoàn toàn (activeWindow() là None)
-                if active_win is None:
-                    self.showMinimized()
         super().changeEvent(event)
 
     def show_translation_loading(self):

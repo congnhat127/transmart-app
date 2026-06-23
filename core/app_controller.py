@@ -332,31 +332,55 @@ class TransMartApp:
 
     def on_application_state_changed(self, state):
         """Xử lý sự kiện khi toàn bộ ứng dụng mất focus (người dùng click ra ứng dụng khác hoặc Desktop)."""
+        print(f"[DEBUG] on_application_state_changed: state={state}")
         if state == Qt.ApplicationState.ApplicationInactive:
+            # Bỏ qua nếu người dùng đang nhấn giữ chuột (ví dụ: đang kéo cửa sổ hoặc click tương tác)
+            if QApplication.mouseButtons() & Qt.MouseButton.LeftButton:
+                print("[DEBUG] Ignore because Left Mouse Button is pressed")
+                return
             import time
             now = time.time()
+            pop_shown_diff = now - getattr(self.pop_translation, "last_shown_time", 0.0)
+            settings_shown_diff = now - getattr(self.settings_window, "last_shown_time", 0.0)
+            history_shown_diff = now - getattr(self.history_window, "last_shown_time", 0.0)
+            print(f"[DEBUG] shown diffs - pop: {pop_shown_diff:.3f}s, settings: {settings_shown_diff:.3f}s, history: {history_shown_diff:.3f}s")
+            
             # Bỏ qua nếu có bất kỳ cửa sổ nào vừa mới được mở/khôi phục trong vòng 500ms
-            if now - getattr(self.pop_translation, "last_shown_time", 0.0) < 0.5:
+            if pop_shown_diff < 0.5:
+                print("[DEBUG] Ignore because pop was shown recently")
                 return
-            if now - getattr(self.settings_window, "last_shown_time", 0.0) < 0.5:
+            if settings_shown_diff < 0.5:
+                print("[DEBUG] Ignore because settings was shown recently")
                 return
-            if now - getattr(self.history_window, "last_shown_time", 0.0) < 0.5:
+            if history_shown_diff < 0.5:
+                print("[DEBUG] Ignore because history was shown recently")
                 return
 
             # Nếu người dùng bấm nút thu nhỏ (Minimize) thủ công trên cửa sổ Cài đặt hoặc Lịch sử,
             # cửa sổ đó đã phát sự kiện thu nhỏ gần đây. Chúng ta KHÔNG muốn thu nhỏ popup dịch theo.
-            if now - getattr(self.settings_window, "last_minimize_time", 0.0) < 0.5:
+            settings_min_diff = now - getattr(self.settings_window, "last_minimize_time", 0.0)
+            history_min_diff = now - getattr(self.history_window, "last_minimize_time", 0.0)
+            pop_min_diff = now - getattr(self.pop_translation, "last_minimize_time", 0.0)
+            print(f"[DEBUG] minimize diffs - settings: {settings_min_diff:.3f}s, history: {history_min_diff:.3f}s, pop: {pop_min_diff:.3f}s")
+            
+            if settings_min_diff < 0.5:
+                print("[DEBUG] Ignore because settings was minimized recently")
                 return
-            if now - getattr(self.history_window, "last_minimize_time", 0.0) < 0.5:
+            if history_min_diff < 0.5:
+                print("[DEBUG] Ignore because history was minimized recently")
                 return
-            if now - getattr(self.pop_translation, "last_minimize_time", 0.0) < 0.5:
+            if pop_min_diff < 0.5:
+                print("[DEBUG] Ignore because pop was minimized recently")
                 return
 
             # Thu nhỏ tất cả các cửa sổ đang hiển thị xuống thanh Taskbar (do nhấp ra ngoài ứng dụng)
             if self.pop_translation.isVisible() and not self.pop_translation.isMinimized():
+                print("[DEBUG] Minimizing pop_translation")
                 self.pop_translation.showMinimized()
             if self.settings_window.isVisible() and not self.settings_window.isMinimized():
+                print("[DEBUG] Minimizing settings_window")
                 self.settings_window.save_values(close_window=False)
                 self.settings_window.showMinimized()
             if self.history_window.isVisible() and not self.history_window.isMinimized():
+                print("[DEBUG] Minimizing history_window")
                 self.history_window.showMinimized()
