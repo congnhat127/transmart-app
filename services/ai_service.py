@@ -215,3 +215,41 @@ You MUST respond ONLY with a valid JSON object matching the following structure:
                 "explanation": f"Chi tiết lỗi: {str(e)}\n\nVui lòng kiểm tra lại kết nối mạng hoặc tính hợp lệ của API Key.",
                 "detected_lang": "unknown"
             }
+
+    @staticmethod
+    def fetch_gemini_models(api_key: str) -> list:
+        """Tải danh sách mô hình từ Google Gemini API trực tuyến."""
+        try:
+            import google.generativeai as genai
+            genai.configure(api_key=api_key)
+            models = []
+            for m in genai.list_models():
+                if "generateContent" in m.supported_generation_methods:
+                    name = m.name.replace("models/", "")
+                    if "gemini" in name:
+                        models.append(name)
+            return sorted(list(set(models)))
+        except Exception as e:
+            print(f"[AIService] Lỗi fetch Gemini models: {e}")
+            return []
+
+    @staticmethod
+    def fetch_openai_models(api_key: str, base_url: str = None) -> list:
+        """Tải danh sách mô hình từ OpenAI API hoặc custom endpoint trực tuyến."""
+        try:
+            from openai import OpenAI
+            client = OpenAI(api_key=api_key, base_url=base_url if base_url else None)
+            models_data = client.models.list()
+            models = []
+            is_custom = base_url and "api.openai.com" not in base_url
+            for m in models_data.data:
+                name = m.id
+                if is_custom:
+                    models.append(name)
+                else:
+                    if name.startswith("gpt-") or name.startswith("o1-") or name.startswith("o3-"):
+                        models.append(name)
+            return sorted(list(set(models)))
+        except Exception as e:
+            print(f"[AIService] Lỗi fetch OpenAI models: {e}")
+            return []

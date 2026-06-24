@@ -19,6 +19,8 @@ SUPPORTED_LANGUAGES = {
 # Cấu hình mặc định của ứng dụng
 DEFAULT_SETTINGS = {
     "api_key": "",
+    "gemini_api_key": "",
+    "openai_api_key": "",
     "provider": "gemini",
     "gemini_model": "gemini-1.5-flash",
     "openai_model": "gpt-4o-mini",

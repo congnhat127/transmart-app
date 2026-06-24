@@ -3,12 +3,30 @@ import time
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
     QComboBox, QSpinBox, QPushButton, QTabWidget, QFormLayout, QGroupBox,
-    QApplication
+    QApplication, QMessageBox
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QEvent
+from PyQt6.QtCore import Qt, pyqtSignal, QEvent, QThread
 from PyQt6.QtGui import QFont, QCursor
 from config.settings import settings_manager
 from config.constants import SUPPORTED_LANGUAGES
+
+class ModelFetchThread(QThread):
+    """Luồng phụ để tải danh sách mô hình trực tuyến tránh treo giao diện chính."""
+    fetched = pyqtSignal(list)
+    
+    def __init__(self, provider: str, api_key: str, base_url: str = None):
+        super().__init__()
+        self.provider = provider
+        self.api_key = api_key
+        self.base_url = base_url
+        
+    def run(self):
+        from services.ai_service import AIService
+        if self.provider == "gemini":
+            models = AIService.fetch_gemini_models(self.api_key)
+        else:
+            models = AIService.fetch_openai_models(self.api_key, self.base_url)
+        self.fetched.emit(models)
 
 class SettingsWindow(QWidget):
     """
@@ -120,13 +138,21 @@ class SettingsWindow(QWidget):
         self.gemini_key_input.setPlaceholderText("Nhập Gemini API Key tại đây...")
         gemini_form.addRow("API Key:", self.gemini_key_input)
         
+        gemini_model_layout = QHBoxLayout()
         self.gemini_model_combo = QComboBox()
         self.gemini_model_combo.addItems([
             "gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", 
             "gemini-3.5-flash", "gemini-flash-latest", "gemini-pro-latest", 
             "gemini-1.5-flash", "gemini-1.5-pro"
         ])
-        gemini_form.addRow("Dòng Model:", self.gemini_model_combo)
+        self.gemini_refresh_btn = QPushButton("🔄 Cập nhật")
+        self.gemini_refresh_btn.setObjectName("RefreshModelBtn")
+        self.gemini_refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.gemini_refresh_btn.setToolTip("Tải danh sách mô hình mới nhất từ API")
+        self.gemini_refresh_btn.clicked.connect(self.refresh_gemini_models)
+        gemini_model_layout.addWidget(self.gemini_model_combo, 1)
+        gemini_model_layout.addWidget(self.gemini_refresh_btn)
+        gemini_form.addRow("Dòng Model:", gemini_model_layout)
         
         # Nhóm cấu hình OpenAI API
         openai_group = QGroupBox("OpenAI GPT Cloud")
@@ -137,9 +163,17 @@ class SettingsWindow(QWidget):
         self.openai_key_input.setPlaceholderText("Nhập OpenAI API Key tại đây...")
         openai_form.addRow("API Key:", self.openai_key_input)
         
+        openai_model_layout = QHBoxLayout()
         self.openai_model_combo = QComboBox()
         self.openai_model_combo.addItems(["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"])
-        openai_form.addRow("Dòng Model:", self.openai_model_combo)
+        self.openai_refresh_btn = QPushButton("🔄 Cập nhật")
+        self.openai_refresh_btn.setObjectName("RefreshModelBtn")
+        self.openai_refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.openai_refresh_btn.setToolTip("Tải danh sách mô hình mới nhất từ API")
+        self.openai_refresh_btn.clicked.connect(self.refresh_openai_models)
+        openai_model_layout.addWidget(self.openai_model_combo, 1)
+        openai_model_layout.addWidget(self.openai_refresh_btn)
+        openai_form.addRow("Dòng Model:", openai_model_layout)
         
         api_layout.addWidget(gemini_group)
         api_layout.addWidget(openai_group)
@@ -194,12 +228,18 @@ class SettingsWindow(QWidget):
         idx_gemini = self.gemini_model_combo.findText(gemini_model)
         if idx_gemini >= 0:
             self.gemini_model_combo.setCurrentIndex(idx_gemini)
+        else:
+            self.gemini_model_combo.addItem(gemini_model)
+            self.gemini_model_combo.setCurrentIndex(self.gemini_model_combo.count() - 1)
             
         self.openai_key_input.setText(settings.get("openai_api_key", ""))
         openai_model = settings.get("openai_model", "gpt-4o-mini")
         idx_openai = self.openai_model_combo.findText(openai_model)
         if idx_openai >= 0:
             self.openai_model_combo.setCurrentIndex(idx_openai)
+        else:
+            self.openai_model_combo.addItem(openai_model)
+            self.openai_model_combo.setCurrentIndex(self.openai_model_combo.count() - 1)
 
     def save_values(self, close_window: bool = True):
         """Lưu toàn bộ cài đặt từ UI xuống file settings.json."""
@@ -227,6 +267,74 @@ class SettingsWindow(QWidget):
         """Hủy bỏ thay đổi bằng cách nạp lại cấu hình cũ từ ổ đĩa và đóng cửa sổ."""
         self.load_values()
         self.close()
+
+    def refresh_gemini_models(self):
+        key = self.gemini_key_input.text().strip()
+        if not key:
+            QMessageBox.warning(self, "Cảnh báo", "Vui lòng nhập Gemini API Key trước khi cập nhật.")
+            return
+            
+        self.gemini_refresh_btn.setEnabled(False)
+        self.gemini_refresh_btn.setText("🔄 Đang tải...")
+        
+        self.gemini_fetch_thread = ModelFetchThread("gemini", key)
+        self.gemini_fetch_thread.fetched.connect(self.on_gemini_models_fetched)
+        self.gemini_fetch_thread.start()
+        
+    def on_gemini_models_fetched(self, models):
+        self.gemini_refresh_btn.setEnabled(True)
+        self.gemini_refresh_btn.setText("🔄 Cập nhật")
+        
+        if not models:
+            QMessageBox.critical(self, "Lỗi", "Không thể lấy danh sách mô hình. Vui lòng kiểm tra lại API Key hoặc kết nối mạng.")
+            return
+            
+        current_model = self.gemini_model_combo.currentText()
+        self.gemini_model_combo.clear()
+        self.gemini_model_combo.addItems(models)
+        
+        idx = self.gemini_model_combo.findText(current_model)
+        if idx >= 0:
+            self.gemini_model_combo.setCurrentIndex(idx)
+        else:
+            self.gemini_model_combo.setCurrentIndex(0)
+            
+        QMessageBox.information(self, "Thành công", f"Đã cập nhật thành công {len(models)} mô hình Gemini!")
+        
+    def refresh_openai_models(self):
+        key = self.openai_key_input.text().strip()
+        if not key:
+            QMessageBox.warning(self, "Cảnh báo", "Vui lòng nhập OpenAI API Key trước khi cập nhật.")
+            return
+            
+        base_url = settings_manager.get("openai_base_url", "https://api.openai.com/v1")
+        
+        self.openai_refresh_btn.setEnabled(False)
+        self.openai_refresh_btn.setText("🔄 Đang tải...")
+        
+        self.openai_fetch_thread = ModelFetchThread("openai", key, base_url)
+        self.openai_fetch_thread.fetched.connect(self.on_openai_models_fetched)
+        self.openai_fetch_thread.start()
+        
+    def on_openai_models_fetched(self, models):
+        self.openai_refresh_btn.setEnabled(True)
+        self.openai_refresh_btn.setText("🔄 Cập nhật")
+        
+        if not models:
+            QMessageBox.critical(self, "Lỗi", "Không thể lấy danh sách mô hình. Vui lòng kiểm tra lại API Key, Base URL hoặc kết nối mạng.")
+            return
+            
+        current_model = self.openai_model_combo.currentText()
+        self.openai_model_combo.clear()
+        self.openai_model_combo.addItems(models)
+        
+        idx = self.openai_model_combo.findText(current_model)
+        if idx >= 0:
+            self.openai_model_combo.setCurrentIndex(idx)
+        else:
+            self.openai_model_combo.setCurrentIndex(0)
+            
+        QMessageBox.information(self, "Thành công", f"Đã cập nhật thành công {len(models)} mô hình OpenAI!")
 
     def _apply_style(self):
         """Thiết lập Style CSS cho Settings Window."""
