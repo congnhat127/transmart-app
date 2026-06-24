@@ -1,10 +1,13 @@
 import os
+import time
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
-    QListWidget, QListWidgetItem, QPushButton, QTextEdit, QMessageBox
+    QListWidget, QListWidgetItem, QPushButton, QTextEdit, QMessageBox,
+    QApplication
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QEvent
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QCursor
+from config.history_manager import history_manager
 
 class HistoryWindow(QWidget):
     """
@@ -16,6 +19,7 @@ class HistoryWindow(QWidget):
     def __init__(self, theme: str = "dark"):
         super().__init__()
         self.theme = theme
+        self.last_move_resize_time = 0.0
         self.setWindowTitle("TransMart - Lịch sử dịch thuật")
         self.setMinimumSize(500, 400)
         self.resize(550, 450)
@@ -106,18 +110,13 @@ class HistoryWindow(QWidget):
         main_layout.addLayout(bottom_layout)
 
     def load_history(self):
-        """Nạp danh sách lịch sử dịch (Placeholder/Mock - sẽ đấu nối với DB/JSON sau)."""
+        """Nạp danh sách lịch sử dịch từ history_manager."""
         self.history_list.clear()
         
-        # Dữ liệu mẫu (Mock Data)
-        self.history_items = [
-            {"source": "Hello World", "translation": "Xin chào thế giới", "explanation": "Lời chào lập trình kinh điển."},
-            {"source": "Machine learning", "translation": "Học máy", "explanation": "Một phân ngành của Trí tuệ nhân tạo (AI)."},
-            {"source": "Git workflow", "translation": "Luồng làm việc Git", "explanation": "Các bước phối hợp code sử dụng Git."}
-        ]
+        self.history_items = history_manager.load_history()
         
         for idx, item in enumerate(self.history_items):
-            list_item = QListWidgetItem(item["source"])
+            list_item = QListWidgetItem(item.get("source", ""))
             # Lưu trữ dữ liệu tùy chỉnh vào item để truy xuất sau
             list_item.setData(Qt.ItemDataRole.UserRole, item)
             self.history_list.addItem(list_item)
@@ -131,8 +130,16 @@ class HistoryWindow(QWidget):
                 
                 translation = item_data.get("translation", "")
                 explanation = item_data.get("explanation", "")
+                summary = item_data.get("summary", "")
+                target_lang = item_data.get("target_lang", "Vietnamese")
+                detected_lang = item_data.get("detected_lang", "unknown")
                 
-                detail_text = f"Dịch: {translation}\n\nGiải thích:\n{explanation}"
+                detail_text = f"Dịch ({detected_lang.upper()} ➜ {target_lang.upper()}):\n{translation}"
+                if summary:
+                    detail_text += f"\n\nTóm tắt chính:\n{summary}"
+                if explanation:
+                    detail_text += f"\n\nGiải thích:\n{explanation}"
+                
                 self.target_view.setPlainText(detail_text)
         else:
             self.source_view.clear()
@@ -149,7 +156,9 @@ class HistoryWindow(QWidget):
         """Xóa bản ghi đang chọn."""
         current_item = self.history_list.currentItem()
         if current_item:
-            self.history_list.takeItem(self.history_list.row(current_item))
+            row = self.history_list.row(current_item)
+            history_manager.delete_record(row)
+            self.load_history()
             QMessageBox.information(self, "Thông báo", "Đã xóa bản ghi được chọn thành công.")
         else:
             QMessageBox.warning(self, "Cảnh báo", "Vui lòng chọn một bản ghi để xóa.")
@@ -161,7 +170,8 @@ class HistoryWindow(QWidget):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No
         )
         if reply == QMessageBox.StandardButton.Yes:
-            self.history_list.clear()
+            history_manager.clear_all()
+            self.load_history()
             self.source_view.clear()
             self.target_view.clear()
             self.history_cleared.emit()
@@ -325,9 +335,17 @@ class HistoryWindow(QWidget):
                 }
             """)
 
+    def moveEvent(self, event):
+        self.last_move_resize_time = time.time()
+        super().moveEvent(event)
+
+    def resizeEvent(self, event):
+        self.last_move_resize_time = time.time()
+        super().resizeEvent(event)
+
     def changeEvent(self, event):
         """Ẩn cửa sổ lịch sử nếu người dùng click ra ngoài (mất focus)."""
-        if event and event.type() == QEvent.Type.ActivationChange:
-            if not self.isActiveWindow():
-                self.hide()
+        if event and event.type() == QEvent.Type.WindowStateChange:
+            if self.isMinimized():
+                self.last_minimize_time = time.time()
         super().changeEvent(event)

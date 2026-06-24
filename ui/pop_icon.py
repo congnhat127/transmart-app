@@ -1,4 +1,5 @@
 # ui/pop_icon.py
+import time
 from PyQt6.QtWidgets import QPushButton
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QEvent
 from PyQt6.QtGui import QEnterEvent
@@ -86,3 +87,7 @@ class PopIconWidget(QPushButton):
         """Khi người dùng rê chuột RA KHỎI nút tròn: Tiếp tục đếm ngược để ẩn."""
         self.hide_timer.start(2000) # Cho thêm 2 giây trước khi ẩn
         super().leaveEvent(event)
+
+    def hideEvent(self, event):
+        self.last_hidden_time = time.time()
+        super().hideEvent(event)

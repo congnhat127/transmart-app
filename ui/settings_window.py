@@ -1,10 +1,12 @@
 import os
+import time
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
-    QComboBox, QSpinBox, QPushButton, QTabWidget, QFormLayout, QGroupBox
+    QComboBox, QSpinBox, QPushButton, QTabWidget, QFormLayout, QGroupBox,
+    QApplication
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QEvent
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QCursor
 from config.settings import settings_manager
 from config.constants import SUPPORTED_LANGUAGES
 
@@ -18,6 +20,7 @@ class SettingsWindow(QWidget):
     def __init__(self, theme: str = "dark"):
         super().__init__()
         self.theme = theme
+        self.last_move_resize_time = 0.0
         self.setWindowTitle("TransMart - Cài đặt hệ thống")
         self.setMinimumSize(420, 480)
         self.resize(450, 500)
@@ -151,7 +154,7 @@ class SettingsWindow(QWidget):
         self.save_btn = QPushButton("Lưu cấu hình")
         self.save_btn.setObjectName("SaveBtn")
         self.save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.save_btn.clicked.connect(self.save_values)
+        self.save_btn.clicked.connect(lambda: self.save_values(close_window=True))
         
         self.cancel_btn = QPushButton("Hủy")
         self.cancel_btn.setObjectName("CancelBtn")
@@ -198,7 +201,7 @@ class SettingsWindow(QWidget):
         if idx_openai >= 0:
             self.openai_model_combo.setCurrentIndex(idx_openai)
 
-    def save_values(self):
+    def save_values(self, close_window: bool = True):
         """Lưu toàn bộ cài đặt từ UI xuống file settings.json."""
         theme_val = "dark" if self.theme_combo.currentIndex() == 0 else "light"
         
@@ -217,7 +220,8 @@ class SettingsWindow(QWidget):
         
         settings_manager.save_settings(new_settings)
         self.settings_saved.emit()
-        self.close()
+        if close_window:
+            self.close()
 
     def cancel_changes(self):
         """Hủy bỏ thay đổi bằng cách nạp lại cấu hình cũ từ ổ đĩa và đóng cửa sổ."""
@@ -380,9 +384,17 @@ class SettingsWindow(QWidget):
                 }
             """)
 
+    def moveEvent(self, event):
+        self.last_move_resize_time = time.time()
+        super().moveEvent(event)
+
+    def resizeEvent(self, event):
+        self.last_move_resize_time = time.time()
+        super().resizeEvent(event)
+
     def changeEvent(self, event):
         """Ẩn cửa sổ cài đặt nếu người dùng click ra ngoài (mất focus)."""
-        if event and event.type() == QEvent.Type.ActivationChange:
-            if not self.isActiveWindow():
-                self.save_values()
+        if event and event.type() == QEvent.Type.WindowStateChange:
+            if self.isMinimized():
+                self.last_minimize_time = time.time()
         super().changeEvent(event)

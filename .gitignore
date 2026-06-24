@@ -4,8 +4,8 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Cấu hình chứa API Key nhạy cảm
-storage/config.json
+# Cấu hình chứa API Key nhạy cảm và lịch sử dịch
+storage/
 
 # Môi trường ảo Python
 .venv/

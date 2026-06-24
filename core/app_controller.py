@@ -1,7 +1,8 @@
 import os
 import sys
+import time
 from PyQt6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
-from PyQt6.QtCore import QTimer, QThread, pyqtSignal, QPoint
+from PyQt6.QtCore import QTimer, QThread, pyqtSignal, QPoint, Qt
 from PyQt6.QtGui import QCursor, QAction
 
 from config.settings import settings_manager
@@ -72,6 +73,9 @@ class TransMartApp:
         # - Bảng dịch phát âm click ➔ Gọi TTS Service
         self.pop_translation.speak_triggered.connect(self.on_speak_triggered)
         
+        # - Bảng dịch thay đổi nội dung gốc ➔ Dịch lại bất đồng bộ
+        self.pop_translation.translation_requested.connect(self.on_translation_requested)
+        
         # - Footer buttons click ➔ Mở các cửa sổ chức năng tương ứng
         self.pop_translation.history_triggered.connect(self.on_history_triggered)
         self.pop_translation.api_triggered.connect(self.on_api_triggered)
@@ -79,6 +83,11 @@ class TransMartApp:
 
         # - Đồng bộ cấu hình khi người dùng lưu cài đặt mới
         self.settings_window.settings_saved.connect(self.on_settings_saved)
+
+        # - Theo dõi trạng thái hoạt động của toàn bộ ứng dụng (lấy/mất focus khỏi hệ thống)
+        self.last_active_window = None
+        QApplication.instance().focusChanged.connect(self.on_focus_changed)
+        QApplication.instance().applicationStateChanged.connect(self.on_application_state_changed)
 
         # 6. Khởi tạo System Tray Icon (Biểu tượng khay hệ thống)
         self._init_tray_icon()
@@ -152,6 +161,7 @@ class TransMartApp:
         
         # 1. Hiển thị trạng thái Loading tức thời để tăng trải nghiệm người dùng
         self.pop_translation.show_loading(text, x, y, source_lang=ui_src, target_lang=ui_tgt)
+        self.last_active_window = self.pop_translation
         
         # 1.5. Kiểm tra Cache cục bộ trước khi gọi AI để đạt tốc độ tức thời (0ms)
         cached_record = history_manager.find_cached_record(text, target_lang)
@@ -174,10 +184,39 @@ class TransMartApp:
         """Callback khi luồng dịch thuật AI hoàn thành."""
         self.display_translation_result(text, result, save_to_history=True)
 
+    def on_translation_requested(self, text: str):
+        """Dịch lại khi người dùng sửa nội dung văn bản gốc trực tiếp trên popup."""
+        if not text.strip():
+            return
+            
+        source_lang = self.settings.get("source_lang", "Auto")
+        target_lang = self.settings.get("target_lang", "Vietnamese")
+        
+        # Chỉ hiển thị trạng thái loading cho ô dịch, không thay đổi ô nhập gốc
+        self.pop_translation.show_translation_loading()
+        
+        # Kiểm tra Cache cục bộ
+        cached_record = history_manager.find_cached_record(text, target_lang)
+        if cached_record:
+            print(f"[DEBUG] Tìm thấy bản dịch trùng khớp trong Cache (0ms) cho văn bản sửa: '{text[:20]}...'")
+            self.display_translation_result(text, cached_record, save_to_history=False)
+            return
+            
+        # Hủy luồng dịch cũ nếu có
+        if self.translation_thread and self.translation_thread.isRunning():
+            self.translation_thread.terminate()
+            self.translation_thread.wait()
+            
+        # Tạo luồng dịch mới
+        self.translation_thread = TranslationThread(self.ai_service, text, source_lang, target_lang)
+        self.translation_thread.translation_finished.connect(self.on_translation_finished)
+        self.translation_thread.start()
+
     def display_translation_result(self, text: str, result: dict, save_to_history: bool = True):
         """Hiển thị kết quả dịch lên popup và ghi vào lịch sử nếu cần."""
         # 1. Đổ kết quả vào bảng dịch nổi
-        self.pop_translation.display_result(text, result)
+        target_lang = self.settings.get("target_lang", "Vietnamese")
+        self.pop_translation.display_result(text, result, target_lang)
         
         if not save_to_history:
             return
@@ -204,7 +243,12 @@ class TransMartApp:
         self.history_window.theme = self.theme
         self.history_window._apply_style()
         self.history_window.load_history()
-        self.history_window.show()
+        self.history_window.last_shown_time = time.time()
+        self.last_active_window = self.history_window
+        if self.history_window.isMinimized():
+            self.history_window.showNormal()
+        else:
+            self.history_window.show()
         self.history_window.raise_()
         self.history_window.activateWindow()
 
@@ -214,7 +258,12 @@ class TransMartApp:
         self.settings_window._apply_style()
         self.settings_window.load_values()
         self.settings_window.tabs.setCurrentIndex(1)
-        self.settings_window.show()
+        self.settings_window.last_shown_time = time.time()
+        self.last_active_window = self.settings_window
+        if self.settings_window.isMinimized():
+            self.settings_window.showNormal()
+        else:
+            self.settings_window.show()
         self.settings_window.raise_()
         self.settings_window.activateWindow()
 
@@ -224,7 +273,12 @@ class TransMartApp:
         self.settings_window._apply_style()
         self.settings_window.load_values()
         self.settings_window.tabs.setCurrentIndex(0)
-        self.settings_window.show()
+        self.settings_window.last_shown_time = time.time()
+        self.last_active_window = self.settings_window
+        if self.settings_window.isMinimized():
+            self.settings_window.showNormal()
+        else:
+            self.settings_window.show()
         self.settings_window.raise_()
         self.settings_window.activateWindow()
 
@@ -281,3 +335,70 @@ class TransMartApp:
         self.stop()
         QApplication.quit()
         sys.exit(0)
+
+    def on_focus_changed(self, old, now):
+        """Theo dõi cửa sổ hoạt động cuối cùng của ứng dụng."""
+        active = QApplication.activeWindow()
+        if active in (self.pop_translation, self.settings_window, self.history_window):
+            self.last_active_window = active
+
+    def on_application_state_changed(self, state):
+        """Xử lý sự kiện khi toàn bộ ứng dụng mất focus (người dùng click ra ứng dụng khác hoặc Desktop)."""
+        print(f"[DEBUG] on_application_state_changed: state={state}")
+        if state == Qt.ApplicationState.ApplicationInactive:
+            # Bỏ qua nếu người dùng đang nhấn giữ chuột (ví dụ: đang kéo cửa sổ hoặc click tương tác)
+            if QApplication.mouseButtons() & Qt.MouseButton.LeftButton:
+                print("[DEBUG] Ignore because Left Mouse Button is pressed")
+                return
+
+            import time
+            now = time.time()
+            cursor_pos = QCursor.pos()
+            
+            # Kiểm tra xem con trỏ chuột có đang nằm trên bất kỳ cửa sổ nào của ứng dụng hay không
+            # (bao gồm cả pop_icon vừa ẩn cách đây dưới 1.5 giây)
+            pop_icon_hidden_diff = now - getattr(self.pop_icon, "last_hidden_time", 0.0)
+            
+            is_inside = False
+            # 1. Kiểm tra pop_icon
+            if (self.pop_icon.isVisible() or pop_icon_hidden_diff < 1.5) and self.pop_icon.frameGeometry().contains(cursor_pos):
+                is_inside = True
+            # 2. Kiểm tra pop_translation
+            elif self.pop_translation.isVisible() and self.pop_translation.frameGeometry().contains(cursor_pos):
+                is_inside = True
+            # 3. Kiểm tra settings_window
+            elif self.settings_window.isVisible() and self.settings_window.frameGeometry().contains(cursor_pos):
+                is_inside = True
+            # 4. Kiểm tra history_window
+            elif self.history_window.isVisible() and self.history_window.frameGeometry().contains(cursor_pos):
+                is_inside = True
+
+            if is_inside:
+                print("[DEBUG] Ignore focus loss because cursor is over one of the application windows")
+                return
+
+            # Nếu nút tròn dịch nhanh vừa ẩn trong vòng 1.5 giây, bỏ qua sự kiện mất focus này
+            # (vì đây là tiến trình chuyển tiếp tự nhiên từ nút tròn sang bảng dịch)
+            if pop_icon_hidden_diff < 1.5:
+                print(f"[DEBUG] Ignore focus loss because pop_icon was hidden recently ({pop_icon_hidden_diff:.3f}s)")
+                return
+
+            # Nếu có bất kỳ cửa sổ nào vừa mới được mở/khôi phục trong vòng 1.5 giây, bỏ qua
+            pop_shown_diff = now - getattr(self.pop_translation, "last_shown_time", 0.0)
+            settings_shown_diff = now - getattr(self.settings_window, "last_shown_time", 0.0)
+            history_shown_diff = now - getattr(self.history_window, "last_shown_time", 0.0)
+            if pop_shown_diff < 1.5 or settings_shown_diff < 1.5 or history_shown_diff < 1.5:
+                print(f"[DEBUG] Ignore focus loss because a window was shown recently (pop: {pop_shown_diff:.3f}s, settings: {settings_shown_diff:.3f}s, history: {history_shown_diff:.3f}s)")
+                return
+
+            # Thu nhỏ tất cả các cửa sổ đang hiển thị xuống thanh Taskbar (do nhấp ra ngoài ứng dụng hoặc Alt+Tab)
+            if self.pop_translation.isVisible() and not self.pop_translation.isMinimized():
+                print("[DEBUG] Minimizing pop_translation")
+                self.pop_translation.showMinimized()
+            if self.settings_window.isVisible() and not self.settings_window.isMinimized():
+                print("[DEBUG] Minimizing settings_window")
+                self.settings_window.save_values(close_window=False)
+                self.settings_window.showMinimized()
+            if self.history_window.isVisible() and not self.history_window.isMinimized():
+                print("[DEBUG] Minimizing history_window")
+                self.history_window.showMinimized()
