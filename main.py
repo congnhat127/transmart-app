@@ -14,7 +14,7 @@ def sigint_handler(app_instance):
     def handler(*args):
         print("\n[Hệ thống] Nhận lệnh dừng (Ctrl+C). Đang dọn dẹp và thoát...")
         app_instance.stop()
-        QApplication.quit()
+        os._exit(0)
     return handler
 
 def main():

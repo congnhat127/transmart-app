@@ -15,6 +15,7 @@ from ui.history_window import HistoryWindow
 from ui.styles import create_tray_icon
 from services.ai_service import AIService
 from services.tts_service import TTSService
+from core.ocr_engine import ScreenCaptureWidget, qpixmap_to_pil
 
 class TranslationThread(QThread):
     """Luồng phụ để thực hiện gọi API dịch thuật AI (tránh gây đơ/block GUI chính)."""
@@ -30,6 +31,21 @@ class TranslationThread(QThread):
     def run(self):
         result = self.ai_service.translate(self.text, self.source_lang, self.target_lang)
         self.translation_finished.emit(self.text, result)
+
+class OcrTranslationThread(QThread):
+    """Luồng phụ để thực hiện nhận dạng và dịch ảnh (OCR) bất đồng bộ."""
+    translation_finished = pyqtSignal(str, dict)  # Phát ra: (văn bản gốc OCR, dict kết quả)
+
+    def __init__(self, ai_service: AIService, image, target_lang: str):
+        super().__init__()
+        self.ai_service = ai_service
+        self.image = image
+        self.target_lang = target_lang
+
+    def run(self):
+        result = self.ai_service.translate_image(self.image, self.target_lang)
+        source_text = result.get("source_text", "Không nhận dạng được văn bản")
+        self.translation_finished.emit(source_text, result)
 
 class TransMartApp:
     """
@@ -86,6 +102,7 @@ class TransMartApp:
 
         # - Theo dõi trạng thái hoạt động của toàn bộ ứng dụng (lấy/mất focus khỏi hệ thống)
         self.last_active_window = None
+        self.capture_widget = None
         QApplication.instance().focusChanged.connect(self.on_focus_changed)
         QApplication.instance().applicationStateChanged.connect(self.on_application_state_changed)
 
@@ -139,7 +156,65 @@ class TransMartApp:
 
     def on_ocr_triggered(self):
         """Chụp ảnh màn hình OCR (Alt+Q)."""
-        print("\n[OCR] Đã nhấn Alt+Q. (Tính năng OCR sẽ được tích hợp ở nhánh ocr-capture)")
+        print("\n[OCR] Bắt đầu quét vùng màn hình để dịch...")
+        # Ẩn các cửa sổ hiện tại của ứng dụng để tránh chụp đè lên hình chụp màn hình
+        self.pop_icon.hide()
+        self.pop_translation.hide()
+        
+        # Khởi tạo widget chụp màn hình nếu chưa có
+        if not self.capture_widget:
+            self.capture_widget = ScreenCaptureWidget()
+            self.capture_widget.capture_finished.connect(self.on_ocr_capture_finished)
+            
+        self.capture_widget.start_capture()
+
+    def on_ocr_capture_finished(self, pixmap, rect):
+        """Xử lý sau khi người dùng quét xong vùng chọn trên màn hình."""
+        # 1. Định vị vị trí hiển thị cho popup dịch
+        # Hiển thị ở chính giữa bên dưới vùng quét
+        x = rect.x() + (rect.width() - self.pop_translation.width()) // 2
+        y = rect.y() + rect.height()
+        
+        # Đảm bảo tọa độ x và y nằm trong phạm vi màn hình khả dụng
+        screen = QApplication.primaryScreen()
+        if screen:
+            screen_geom = screen.availableGeometry()
+            # Tránh tràn lề trái/phải
+            x = max(screen_geom.left() + 10, min(x, screen_geom.right() - self.pop_translation.width() - 10))
+            # Tránh tràn lề dưới (nếu không đủ không gian phía dưới thì hiển thị ở phía trên vùng quét)
+            if y + self.pop_translation.height() > screen_geom.bottom() - 10:
+                y = max(screen_geom.top() + 10, rect.y() - self.pop_translation.height() - 10)
+        
+        # 2. Hiển thị popup dịch ở trạng thái Loading
+        self.pop_translation.show_loading("Đang quét ảnh OCR...", x, y)
+        self.last_active_window = self.pop_translation
+        
+        # 3. Chuyển QPixmap sang Pillow Image
+        try:
+            pil_img = qpixmap_to_pil(pixmap)
+        except Exception as e:
+            print(f"[OCR] Lỗi chuyển đổi ảnh: {e}")
+            self.pop_translation.display_result(
+                "Lỗi quét ảnh OCR",
+                {
+                    "translation": "Không thể xử lý định dạng ảnh chụp màn hình.",
+                    "explanation": str(e),
+                    "detected_lang": "unknown"
+                },
+                self.settings.get("target_lang", "Vietnamese")
+            )
+            return
+            
+        # 4. Hủy luồng dịch cũ nếu có
+        if self.translation_thread and self.translation_thread.isRunning():
+            self.translation_thread.terminate()
+            self.translation_thread.wait()
+            
+        # 5. Khởi chạy luồng dịch OCR bất đồng bộ
+        target_lang = self.settings.get("target_lang", "Vietnamese")
+        self.translation_thread = OcrTranslationThread(self.ai_service, pil_img, target_lang)
+        self.translation_thread.translation_finished.connect(self.on_translation_finished)
+        self.translation_thread.start()
 
     def start_translation(self, text: str, x: int = None, y: int = None):
         """Bắt đầu tiến trình dịch thuật bất đồng bộ."""
