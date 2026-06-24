@@ -56,7 +56,7 @@ class PopTranslationWidget(QWidget):
         self.setStyleSheet(get_translation_popup_style(self.theme, self.font_size))
         
         # Đặt kích thước mặc định cho hộp thoại
-        self.setFixedSize(380, 320)
+        self.setFixedSize(430, 320)
 
     def _init_ui(self):
         """Khởi tạo bố cục và các widget bên trong."""
@@ -105,16 +105,19 @@ class PopTranslationWidget(QWidget):
         
         # Nút Copy nhanh
         self.copy_btn = QPushButton("📋 Sao chép")
+        self.copy_btn.setToolTip("Sao chép bản dịch")
         self.copy_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.copy_btn.clicked.connect(self._on_copy_clicked)
         
         # Nút Phát âm Bản gốc (TTS Source)
         self.tts_src_btn = QPushButton("🔊 Đọc gốc")
+        self.tts_src_btn.setToolTip("Phát âm văn bản nguồn (gốc)")
         self.tts_src_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.tts_src_btn.clicked.connect(self._on_tts_src_clicked)
         
         # Nút Phát âm Bản dịch (TTS Target)
         self.tts_btn = QPushButton("🔊 Đọc dịch")
+        self.tts_btn.setToolTip("Phát âm văn bản dịch (kết quả)")
         self.tts_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.tts_btn.clicked.connect(self._on_tts_clicked)
         
