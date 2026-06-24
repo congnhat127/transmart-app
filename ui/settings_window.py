@@ -154,7 +154,7 @@ class SettingsWindow(QWidget):
         self.save_btn = QPushButton("Lưu cấu hình")
         self.save_btn.setObjectName("SaveBtn")
         self.save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.save_btn.clicked.connect(self.save_values)
+        self.save_btn.clicked.connect(lambda: self.save_values(close_window=True))
         
         self.cancel_btn = QPushButton("Hủy")
         self.cancel_btn.setObjectName("CancelBtn")
