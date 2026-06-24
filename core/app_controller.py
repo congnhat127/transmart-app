@@ -356,12 +356,12 @@ class TransMartApp:
             cursor_pos = QCursor.pos()
             
             # Kiểm tra xem con trỏ chuột có đang nằm trên bất kỳ cửa sổ nào của ứng dụng hay không
-            # (bao gồm cả pop_icon vừa ẩn cách đây dưới 500ms)
+            # (bao gồm cả pop_icon vừa ẩn cách đây dưới 1.5 giây)
             pop_icon_hidden_diff = now - getattr(self.pop_icon, "last_hidden_time", 0.0)
             
             is_inside = False
             # 1. Kiểm tra pop_icon
-            if (self.pop_icon.isVisible() or pop_icon_hidden_diff < 0.5) and self.pop_icon.frameGeometry().contains(cursor_pos):
+            if (self.pop_icon.isVisible() or pop_icon_hidden_diff < 1.5) and self.pop_icon.frameGeometry().contains(cursor_pos):
                 is_inside = True
             # 2. Kiểm tra pop_translation
             elif self.pop_translation.isVisible() and self.pop_translation.frameGeometry().contains(cursor_pos):
@@ -377,11 +377,17 @@ class TransMartApp:
                 print("[DEBUG] Ignore focus loss because cursor is over one of the application windows")
                 return
 
-            # Nếu có bất kỳ cửa sổ nào vừa mới được mở/khôi phục trong vòng 500ms, bỏ qua
+            # Nếu nút tròn dịch nhanh vừa ẩn trong vòng 1.5 giây, bỏ qua sự kiện mất focus này
+            # (vì đây là tiến trình chuyển tiếp tự nhiên từ nút tròn sang bảng dịch)
+            if pop_icon_hidden_diff < 1.5:
+                print(f"[DEBUG] Ignore focus loss because pop_icon was hidden recently ({pop_icon_hidden_diff:.3f}s)")
+                return
+
+            # Nếu có bất kỳ cửa sổ nào vừa mới được mở/khôi phục trong vòng 1.5 giây, bỏ qua
             pop_shown_diff = now - getattr(self.pop_translation, "last_shown_time", 0.0)
             settings_shown_diff = now - getattr(self.settings_window, "last_shown_time", 0.0)
             history_shown_diff = now - getattr(self.history_window, "last_shown_time", 0.0)
-            if pop_shown_diff < 0.5 or settings_shown_diff < 0.5 or history_shown_diff < 0.5:
+            if pop_shown_diff < 1.5 or settings_shown_diff < 1.5 or history_shown_diff < 1.5:
                 print(f"[DEBUG] Ignore focus loss because a window was shown recently (pop: {pop_shown_diff:.3f}s, settings: {settings_shown_diff:.3f}s, history: {history_shown_diff:.3f}s)")
                 return
 
