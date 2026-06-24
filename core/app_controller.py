@@ -350,37 +350,42 @@ class TransMartApp:
             if QApplication.mouseButtons() & Qt.MouseButton.LeftButton:
                 print("[DEBUG] Ignore because Left Mouse Button is pressed")
                 return
+
             import time
             now = time.time()
+            cursor_pos = QCursor.pos()
+            
+            # Kiểm tra xem con trỏ chuột có đang nằm trên bất kỳ cửa sổ nào của ứng dụng hay không
+            # (bao gồm cả pop_icon vừa ẩn cách đây dưới 500ms)
+            pop_icon_hidden_diff = now - getattr(self.pop_icon, "last_hidden_time", 0.0)
+            
+            is_inside = False
+            # 1. Kiểm tra pop_icon
+            if (self.pop_icon.isVisible() or pop_icon_hidden_diff < 0.5) and self.pop_icon.frameGeometry().contains(cursor_pos):
+                is_inside = True
+            # 2. Kiểm tra pop_translation
+            elif self.pop_translation.isVisible() and self.pop_translation.frameGeometry().contains(cursor_pos):
+                is_inside = True
+            # 3. Kiểm tra settings_window
+            elif self.settings_window.isVisible() and self.settings_window.frameGeometry().contains(cursor_pos):
+                is_inside = True
+            # 4. Kiểm tra history_window
+            elif self.history_window.isVisible() and self.history_window.frameGeometry().contains(cursor_pos):
+                is_inside = True
+
+            if is_inside:
+                print("[DEBUG] Ignore focus loss because cursor is over one of the application windows")
+                return
+
+            # Nếu có bất kỳ cửa sổ nào vừa mới được mở/khôi phục trong vòng 500ms, bỏ qua
             pop_shown_diff = now - getattr(self.pop_translation, "last_shown_time", 0.0)
             settings_shown_diff = now - getattr(self.settings_window, "last_shown_time", 0.0)
             history_shown_diff = now - getattr(self.history_window, "last_shown_time", 0.0)
-            print(f"[DEBUG] shown diffs - pop: {pop_shown_diff:.3f}s, settings: {settings_shown_diff:.3f}s, history: {history_shown_diff:.3f}s")
-            
-            # Bỏ qua nếu có bất kỳ cửa sổ nào vừa mới được mở/khôi phục trong vòng 500ms
-            if pop_shown_diff < 0.5:
-                print("[DEBUG] Ignore because pop was shown recently")
-                return
-            if settings_shown_diff < 0.5:
-                print("[DEBUG] Ignore because settings was shown recently")
-                return
-            if history_shown_diff < 0.5:
-                print("[DEBUG] Ignore because history was shown recently")
+            if pop_shown_diff < 0.5 or settings_shown_diff < 0.5 or history_shown_diff < 0.5:
+                print(f"[DEBUG] Ignore focus loss because a window was shown recently (pop: {pop_shown_diff:.3f}s, settings: {settings_shown_diff:.3f}s, history: {history_shown_diff:.3f}s)")
                 return
 
-            # Nếu tiêu điểm trước đó là một cửa sổ chức năng và cửa sổ đó đang thu nhỏ (do người dùng bấm nút Minimize thủ công),
-            # chúng ta KHÔNG tự động thu nhỏ các cửa sổ khác (như popup).
-            if self.last_active_window == self.settings_window and self.settings_window.isMinimized():
-                print("[DEBUG] Ignore because settings was active and is now minimized")
-                return
-            if self.last_active_window == self.history_window and self.history_window.isMinimized():
-                print("[DEBUG] Ignore because history was active and is now minimized")
-                return
-            if self.last_active_window == self.pop_translation and self.pop_translation.isMinimized():
-                print("[DEBUG] Ignore because pop was active and is now minimized")
-                return
-
-            # Thu nhỏ tất cả các cửa sổ đang hiển thị xuống thanh Taskbar (do nhấp ra ngoài ứng dụng)
+            # Thu nhỏ tất cả các cửa sổ đang hiển thị xuống thanh Taskbar (do nhấp ra ngoài ứng dụng hoặc Alt+Tab)
             if self.pop_translation.isVisible() and not self.pop_translation.isMinimized():
                 print("[DEBUG] Minimizing pop_translation")
                 self.pop_translation.showMinimized()
