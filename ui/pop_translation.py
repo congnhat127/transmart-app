@@ -1,7 +1,7 @@
 # ui/pop_translation.py
 import time
 import pyperclip
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTextEdit, QFrame
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTextEdit, QFrame, QApplication
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QTimer, QEvent
 from PyQt6.QtGui import QMouseEvent, QFont, QCursor
 
@@ -195,6 +195,45 @@ class PopTranslationWidget(QWidget):
         # Đưa con trỏ chuột ra ngoài để người dùng có thể đọc ngay
         self.raise_()
         self.activateWindow()
+
+    def show_blank(self, x: int = None, y: int = None):
+        """Hiển thị hộp thoại dịch ở trạng thái trống để người dùng tự nhập."""
+        self.is_updating_programmatically = True
+        self.source_text_edit.setPlainText("")
+        self.is_updating_programmatically = False
+        self.target_text_edit.setPlainText("")
+        
+        # Đọc cấu hình ngôn ngữ hiển thị mặc định
+        from config.settings import settings_manager
+        from config.constants import SUPPORTED_LANGUAGES
+        settings = settings_manager.load_settings()
+        src_code = settings.get("source_lang", "Auto")
+        tgt_code = settings.get("target_lang", "Vietnamese")
+        
+        source_lang = SUPPORTED_LANGUAGES.get(src_code, "Tự động")
+        target_lang = SUPPORTED_LANGUAGES.get(tgt_code, "Tiếng Việt")
+        self.lang_label.setText(f"{source_lang.upper()} ➜ {target_lang.upper()}")
+        
+        if x is not None and y is not None:
+            self.move(x, y)
+        else:
+            # Di chuyển ra giữa màn hình nếu không truyền vị trí cụ thể
+            screen = QApplication.primaryScreen()
+            if screen:
+                screen_geom = screen.availableGeometry()
+                center_x = screen_geom.left() + (screen_geom.width() - self.width()) // 2
+                center_y = screen_geom.top() + (screen_geom.height() - self.height()) // 2
+                self.move(center_x, center_y)
+                
+        self.last_shown_time = time.time()
+        if self.isMinimized():
+            self.showNormal()
+        else:
+            self.show()
+            
+        self.raise_()
+        self.activateWindow()
+        self.source_text_edit.setFocus()
 
     def display_result(self, raw_text: str, result_dict: dict, target_lang: str = "Vietnamese"):
         """
