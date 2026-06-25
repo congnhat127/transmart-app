@@ -46,6 +46,7 @@ class PopTranslationWidget(QWidget):
             Qt.WindowType.Window | 
             Qt.WindowType.WindowCloseButtonHint | 
             Qt.WindowType.WindowMinimizeButtonHint |
+            Qt.WindowType.WindowMaximizeButtonHint |
             Qt.WindowType.WindowStaysOnTopHint
         )
         self.setWindowTitle("TransMart - Dịch nhanh")
@@ -55,8 +56,9 @@ class PopTranslationWidget(QWidget):
         self._init_ui()
         self.setStyleSheet(get_translation_popup_style(self.theme, self.font_size))
         
-        # Đặt kích thước mặc định cho hộp thoại
-        self.setFixedSize(430, 320)
+        # Đặt kích thước mặc định và hỗ trợ tự do kéo giãn phóng to thu nhỏ
+        self.resize(430, 320)
+        self.setMinimumSize(400, 250)
 
     def _init_ui(self):
         """Khởi tạo bố cục và các widget bên trong."""
@@ -198,7 +200,8 @@ class PopTranslationWidget(QWidget):
         Giúp tăng trải nghiệm UX, người dùng biết app đang xử lý, không bị cảm giác đơ click.
         """
         self.is_updating_programmatically = True
-        self.source_text_edit.setPlainText(raw_text)
+        if self.source_text_edit.toPlainText().strip() != raw_text.strip():
+            self.source_text_edit.setPlainText(raw_text)
         self.target_text_edit.setPlainText("Đang dịch, vui lòng chờ trong giây lát...")
         
         idx_src = self.src_lang_combo.findData(source_lang)
@@ -272,7 +275,8 @@ class PopTranslationWidget(QWidget):
         """
         self.source_text = raw_text
         self.is_updating_programmatically = True
-        self.source_text_edit.setPlainText(raw_text)
+        if self.source_text_edit.toPlainText().strip() != raw_text.strip():
+            self.source_text_edit.setPlainText(raw_text)
         
         # Đồng bộ hóa combobox với cấu hình hiện tại
         from config.settings import settings_manager
@@ -365,8 +369,9 @@ class PopTranslationWidget(QWidget):
 
     def _on_tts_src_clicked(self):
         """Xử lý phát âm văn bản gốc."""
-        if hasattr(self, "source_text") and self.source_text:
-            self.speak_triggered.emit(self.source_text.strip(), self.source_lang_code)
+        text = self.source_text_edit.toPlainText().strip()
+        if text:
+            self.speak_triggered.emit(text, self.source_lang_code)
 
     def _on_history_clicked(self):
         """Xử lý sự kiện click nút Lịch sử dịch."""
