@@ -27,6 +27,9 @@ def main():
     # Ẩn các cảnh báo hệ thống font DirectWrite không cần thiết của Qt trên Windows
     os.environ["QT_LOGGING_RULES"] = "qt.qpa.fonts.warning=false"
     
+    # Ép buộc sử dụng backend native Windows Media Foundation để tránh lỗi câm tiếng của FFmpeg
+    os.environ["QT_MEDIA_BACKEND"] = "windows"
+    
     # Khởi tạo ứng dụng PyQt6
     app = QApplication(sys.argv)
     
