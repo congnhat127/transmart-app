@@ -3,7 +3,14 @@ import json
 import time
 
 # Đường dẫn gốc dự án và đường dẫn file lưu lịch sử dịch thuật
-ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+import sys
+if hasattr(sys, 'frozen'):
+    # Khi chạy file đóng gói, lưu vào AppData/Local/TransMart để đảm bảo quyền ghi và bảo toàn khi update app
+    ROOT_DIR = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "TransMart")
+else:
+    # Khi dev, lưu trực tiếp tại thư mục dự án cho dễ debug
+    ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 HISTORY_PATH = os.path.join(ROOT_DIR, "storage", "history.json")
 
 class HistoryManager:
