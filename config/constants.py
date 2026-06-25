@@ -21,7 +21,7 @@ DEFAULT_SETTINGS = {
     "api_key": "",
     "gemini_api_key": "",
     "openai_api_key": "",
-    "provider": "gemini",
+    "provider": "google",
     "gemini_model": "gemini-1.5-flash",
     "openai_model": "gpt-4o-mini",
     "openai_base_url": "https://api.openai.com/v1",

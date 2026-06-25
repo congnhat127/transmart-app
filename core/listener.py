@@ -3,8 +3,7 @@ import os
 import ctypes
 # pyrefly: ignore [missing-import]
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer
-import keyboard
-import pynput
+from pynput import keyboard, mouse
 
 from core.clipboard_manager import ClipboardManager
 
@@ -118,6 +117,18 @@ def is_ibeam_cursor() -> bool:
         print(f"[Listener] Lỗi phân tích con trỏ: {e}")
     return False
 
+def to_pynput_hotkey(hotkey_str: str) -> str:
+    """Chuyển đổi phím tắt định dạng 'alt+z' sang '<alt>+z' để phù hợp với pynput."""
+    parts = hotkey_str.lower().split('+')
+    pynput_parts = []
+    for part in parts:
+        part = part.strip()
+        if part in ('alt', 'ctrl', 'shift', 'cmd', 'win'):
+            pynput_parts.append(f"<{part}>")
+        else:
+            pynput_parts.append(part)
+    return "+".join(pynput_parts)
+
 class SystemListener(QObject):
     """
     Lớp lắng nghe sự kiện Hệ thống (Bàn phím và Chuột).
@@ -159,14 +170,20 @@ class SystemListener(QObject):
     def start(self, hotkey: str = "alt+z", ocr_hotkey: str = "alt+q"):
         """Khởi chạy bộ lắng nghe phím tắt và chuột."""
         try:
-            # 1. Đăng ký phím tắt hệ thống bằng thư viện `keyboard`
-            # Lệnh này sẽ chạy ngầm để bắt phím kể cả khi app đang ẩn
-            keyboard.add_hotkey(hotkey, self._on_translate_hotkey)
-            keyboard.add_hotkey(ocr_hotkey, self._on_ocr_hotkey)
+            # 1. Đăng ký phím tắt hệ thống bằng pynput.keyboard.GlobalHotKeys
+            # Sử dụng thư viện pynput giúp tránh xung đột với phím PrtSc (Print Screen) của Windows
+            pynput_hotkey = to_pynput_hotkey(hotkey)
+            pynput_ocr_hotkey = to_pynput_hotkey(ocr_hotkey)
             
-            # 2. Đăng ký lắng nghe chuột bằng `pynput.mouse`
+            self.hotkey_listener = keyboard.GlobalHotKeys({
+                pynput_hotkey: self._on_translate_hotkey,
+                pynput_ocr_hotkey: self._on_ocr_hotkey
+            })
+            self.hotkey_listener.start()
+            
+            # 2. Đăng ký lắng nghe chuột bằng `mouse.Listener`
             # Khởi chạy một luồng daemon chạy ngầm để lắng nghe
-            self.mouse_listener = pynput.mouse.Listener(on_click=self._on_click)
+            self.mouse_listener = mouse.Listener(on_click=self._on_click)
             self.mouse_listener.start()
             
             print(f"[Listener] Đang lắng nghe phím tắt ({hotkey}, {ocr_hotkey}) và sự kiện chuột...")
@@ -176,11 +193,12 @@ class SystemListener(QObject):
     def stop(self):
         """Dừng tất cả bộ lắng nghe và giải phóng tài nguyên."""
         try:
-            # Hủy đăng ký tất cả phím tắt
-            keyboard.unhook_all()
+            # Dừng lắng nghe phím tắt
+            if hasattr(self, "hotkey_listener") and self.hotkey_listener:
+                self.hotkey_listener.stop()
             
             # Dừng lắng nghe chuột
-            if self.mouse_listener:
+            if hasattr(self, "mouse_listener") and self.mouse_listener:
                 self.mouse_listener.stop()
                 
             print("[Listener] Đã dừng bộ lắng nghe hệ thống.")
@@ -209,7 +227,7 @@ class SystemListener(QObject):
         Được gọi mỗi khi người dùng click chuột xuống hoặc nhả chuột ra.
         """
         # Chúng ta chỉ quan tâm tới chuột trái (chuột dùng để bôi đen chữ)
-        if button == pynput.mouse.Button.left:
+        if button == mouse.Button.left:
             if pressed:
                 # Chuột trái được nhấn xuống: Ghi lại trạng thái, tọa độ và kiểm tra loại con trỏ
                 self.is_left_pressed = True
@@ -233,6 +251,17 @@ class SystemListener(QObject):
                     
                     # Danh sách các ứng dụng soạn thảo văn bản, trình duyệt, đọc tài liệu hay bôi đen kéo chuột ra ngoài
                     active_exe = get_active_window_process_name().lower()
+                    
+                    # Tránh can thiệp khi người dùng chụp ảnh màn hình bằng Snipping Tool hoặc các app chụp ảnh khác
+                    blacklist_apps = {
+                        "screenclippinghost.exe", "snippingtool.exe", "screensketch.exe", 
+                        "lightshot.exe", "sharex.exe"
+                    }
+                    if active_exe in blacklist_apps:
+                        self.is_left_pressed = False
+                        self.drag_start_pos = None
+                        return
+                        
                     lenient_apps = {
                         "chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "opera.exe", 
                         "vivaldi.exe", "iexplore.exe", "safari.exe", "winword.exe", "excel.exe", 

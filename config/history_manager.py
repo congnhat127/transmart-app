@@ -25,7 +25,7 @@ class HistoryManager:
             self.history = []
         return self.history
 
-    def add_record(self, source: str, translation: str, explanation: str, detected_lang: str, target_lang: str = "Vietnamese", summary: str = "") -> bool:
+    def add_record(self, source: str, translation: str, explanation: str, detected_lang: str, target_lang: str = "Vietnamese", summary: str = "", provider: str = "google") -> bool:
         """
         Thêm một bản ghi dịch thuật mới vào lịch sử.
         Bản ghi mới sẽ được đưa lên đầu danh sách để dễ theo dõi.
@@ -40,6 +40,7 @@ class HistoryManager:
             "summary": summary.strip(),
             "detected_lang": detected_lang,
             "target_lang": target_lang.strip(),
+            "provider": provider.strip().lower(),
             "timestamp": time.time()
         }
         
@@ -52,13 +53,16 @@ class HistoryManager:
             
         return self.save_history()
 
-    def find_cached_record(self, source: str, target_lang: str) -> dict:
+    def find_cached_record(self, source: str, target_lang: str, provider: str = "google") -> dict:
         """Tìm bản ghi dịch thuật trùng khớp trong lịch sử để sử dụng làm bộ nhớ đệm (Cache)."""
         src_clean = source.strip().lower()
         tgt_clean = target_lang.strip().lower()
+        prov_clean = provider.strip().lower()
         for record in self.history:
-            # So khớp cả văn bản gốc và ngôn ngữ đích mong muốn
-            if record.get("source", "").lower() == src_clean and record.get("target_lang", "vietnamese").lower() == tgt_clean:
+            # So khớp văn bản gốc, ngôn ngữ đích và cả nhà cung cấp dịch vụ (provider)
+            if (record.get("source", "").lower() == src_clean and 
+                record.get("target_lang", "vietnamese").lower() == tgt_clean and
+                record.get("provider", "gemini").lower() == prov_clean):
                 return record
         return None
 

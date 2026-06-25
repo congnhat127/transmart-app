@@ -67,13 +67,14 @@ def get_translation_popup_style(theme: str, font_size: int) -> str:
             border-radius: 16px;
         }}
         
-        /* Nhãn tiêu đề ngôn ngữ */
-        QLabel#LangLabel {{
-            color: #E6E6E6;
+        /* Nhãn tiêu đề ngôn ngữ & Mũi tên */
+        QLabel#LangLabel, QLabel#ArrowLabel {{
+            color: rgba(255, 255, 255, 0.7);
             font-size: 12px;
             font-weight: bold;
             font-family: 'Segoe UI', 'Outfit', sans-serif;
             background: transparent;
+            margin: 0 4px;
         }}
         
         /* Ô nhập/hiển thị văn bản */
@@ -167,6 +168,43 @@ def get_translation_popup_style(theme: str, font_size: int) -> str:
             border: none;
             background: transparent;
         }}
+        
+        /* Combobox tùy chọn ngôn ngữ trên Popup */
+        QComboBox#PopSrcLangCombo, QComboBox#PopTgtLangCombo {{
+            background-color: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 6px;
+            color: #FFFFFF;
+            padding: 2px 20px 2px 8px;
+            font-size: 11px;
+            font-family: 'Segoe UI', sans-serif;
+            font-weight: 500;
+            min-width: 90px;
+            height: 22px;
+        }}
+        QComboBox#PopSrcLangCombo::drop-down, QComboBox#PopTgtLangCombo::drop-down {{
+            subcontrol-origin: padding;
+            subcontrol-position: top right;
+            width: 16px;
+            border-left: none;
+        }}
+        QComboBox#PopSrcLangCombo::down-arrow, QComboBox#PopTgtLangCombo::down-arrow {{
+            image: none;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-top: 4px solid rgba(255, 255, 255, 0.7);
+            width: 0;
+            height: 0;
+            margin-right: 6px;
+        }}
+        QComboBox#PopSrcLangCombo QAbstractItemView, QComboBox#PopTgtLangCombo QAbstractItemView {{
+            background-color: #1e1e1e;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 6px;
+            color: #FFFFFF;
+            selection-background-color: #0078D4;
+            selection-color: #FFFFFF;
+        }}
         """
     else:
         return f"""
@@ -177,13 +215,14 @@ def get_translation_popup_style(theme: str, font_size: int) -> str:
             border-radius: 16px;
         }}
         
-        /* Nhãn tiêu đề ngôn ngữ */
-        QLabel#LangLabel {{
-            color: #1A1A1A;
+        /* Nhãn tiêu đề ngôn ngữ & Mũi tên */
+        QLabel#LangLabel, QLabel#ArrowLabel {{
+            color: rgba(0, 0, 0, 0.7);
             font-size: 12px;
             font-weight: bold;
             font-family: 'Segoe UI', 'Outfit', sans-serif;
             background: transparent;
+            margin: 0 4px;
         }}
         
         /* Ô nhập/hiển thị văn bản */
@@ -276,6 +315,43 @@ def get_translation_popup_style(theme: str, font_size: int) -> str:
         QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
             border: none;
             background: transparent;
+        }}
+        
+        /* Combobox tùy chọn ngôn ngữ trên Popup */
+        QComboBox#PopSrcLangCombo, QComboBox#PopTgtLangCombo {{
+            background-color: rgba(0, 0, 0, 0.05);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            border-radius: 6px;
+            color: #1A1A1A;
+            padding: 2px 20px 2px 8px;
+            font-size: 11px;
+            font-family: 'Segoe UI', sans-serif;
+            font-weight: 500;
+            min-width: 90px;
+            height: 22px;
+        }}
+        QComboBox#PopSrcLangCombo::drop-down, QComboBox#PopTgtLangCombo::drop-down {{
+            subcontrol-origin: padding;
+            subcontrol-position: top right;
+            width: 16px;
+            border-left: none;
+        }}
+        QComboBox#PopSrcLangCombo::down-arrow, QComboBox#PopTgtLangCombo::down-arrow {{
+            image: none;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-top: 4px solid rgba(0, 0, 0, 0.6);
+            width: 0;
+            height: 0;
+            margin-right: 6px;
+        }}
+        QComboBox#PopSrcLangCombo QAbstractItemView, QComboBox#PopTgtLangCombo QAbstractItemView {{
+            background-color: #FFFFFF;
+            border: 1px solid rgba(0, 0, 0, 0.15);
+            border-radius: 6px;
+            color: #1A1A1A;
+            selection-background-color: #0078D4;
+            selection-color: #FFFFFF;
         }}
         """
 
