@@ -477,8 +477,19 @@ class TransMartApp:
 
             # Thu nhỏ tất cả các cửa sổ đang hiển thị xuống thanh Taskbar (do nhấp ra ngoài ứng dụng hoặc Alt+Tab)
             if self.pop_translation.isVisible() and not self.pop_translation.isMinimized():
-                print("[DEBUG] Minimizing pop_translation")
-                self.pop_translation.showMinimized()
+                is_playing = False
+                if hasattr(self, "tts_service") and self.tts_service:
+                    try:
+                        if self.tts_service.player.playbackState().name == "PlayingState":
+                            is_playing = True
+                    except Exception:
+                        pass
+                
+                if is_playing:
+                    print("[DEBUG] Skip minimizing pop_translation because TTS is playing")
+                else:
+                    print("[DEBUG] Minimizing pop_translation")
+                    self.pop_translation.showMinimized()
             if self.settings_window.isVisible() and not self.settings_window.isMinimized():
                 print("[DEBUG] Minimizing settings_window")
                 self.settings_window.save_values(close_window=False)
