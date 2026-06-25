@@ -87,7 +87,7 @@ Text to translate:
                 
                 return {
                     "translation": translation,
-                    "explanation": "Dịch bởi Google Dịch (Miễn phí, không cần API Key).",
+                    "explanation": "Dịch bởi Google Dịch.",
                     "summary": "",
                     "detected_lang": detected
                 }
