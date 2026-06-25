@@ -1,7 +1,7 @@
 # ui/pop_translation.py
 import time
 import pyperclip
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTextEdit, QFrame, QApplication
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTextEdit, QFrame, QApplication, QComboBox
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QTimer, QEvent
 from PyQt6.QtGui import QMouseEvent, QFont, QCursor
 
@@ -76,10 +76,29 @@ class PopTranslationWidget(QWidget):
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(6)
         
-        self.lang_label = QLabel("ĐANG DỊCH...")
-        self.lang_label.setObjectName("LangLabel")
+        from config.constants import SUPPORTED_LANGUAGES
         
-        header_layout.addWidget(self.lang_label)
+        self.src_lang_combo = QComboBox()
+        self.src_lang_combo.setObjectName("PopSrcLangCombo")
+        for key, val in SUPPORTED_LANGUAGES.items():
+            self.src_lang_combo.addItem(val, key)
+            
+        self.arrow_label = QLabel("➜")
+        self.arrow_label.setObjectName("ArrowLabel")
+        
+        self.tgt_lang_combo = QComboBox()
+        self.tgt_lang_combo.setObjectName("PopTgtLangCombo")
+        for key, val in SUPPORTED_LANGUAGES.items():
+            if key != "Auto":
+                self.tgt_lang_combo.addItem(val, key)
+                
+        # Kết nối sự kiện đổi ngôn ngữ
+        self.src_lang_combo.currentIndexChanged.connect(self._on_lang_combo_changed)
+        self.tgt_lang_combo.currentIndexChanged.connect(self._on_lang_combo_changed)
+        
+        header_layout.addWidget(self.src_lang_combo)
+        header_layout.addWidget(self.arrow_label)
+        header_layout.addWidget(self.tgt_lang_combo)
         header_layout.addStretch()
         
         # --- BODY LAYOUT (Văn bản gốc & Văn bản dịch) ---
@@ -173,16 +192,24 @@ class PopTranslationWidget(QWidget):
         # Thêm Card chính vào Layout của Widget
         main_layout.addWidget(self.card)
 
-    def show_loading(self, raw_text: str, x: int, y: int, source_lang: str = "Tự động", target_lang: str = "Tiếng Việt"):
+    def show_loading(self, raw_text: str, x: int, y: int, source_lang: str = "Auto", target_lang: str = "Vietnamese"):
         """
         Hiển thị hộp thoại ngay lập tức tại vị trí chuột ở trạng thái 'Đang dịch'.
         Giúp tăng trải nghiệm UX, người dùng biết app đang xử lý, không bị cảm giác đơ click.
         """
         self.is_updating_programmatically = True
         self.source_text_edit.setPlainText(raw_text)
+        self.target_text_edit.setPlainText("Đang dịch, vui lòng chờ trong giây lát...")
+        
+        idx_src = self.src_lang_combo.findData(source_lang)
+        if idx_src >= 0:
+            self.src_lang_combo.setCurrentIndex(idx_src)
+            
+        idx_tgt = self.tgt_lang_combo.findData(target_lang)
+        if idx_tgt >= 0:
+            self.tgt_lang_combo.setCurrentIndex(idx_tgt)
+            
         self.is_updating_programmatically = False
-        self.target_text_edit.setPlainText("Đang dịch bằng AI, vui lòng chờ trong giây lát...")
-        self.lang_label.setText(f"{source_lang.upper()} ➜ {target_lang.upper()}")
         
         # Di chuyển hộp thoại đến vị trí chuột (lệch xuống dưới 20px)
         self.move(x + 10, y + 20)
@@ -200,19 +227,23 @@ class PopTranslationWidget(QWidget):
         """Hiển thị hộp thoại dịch ở trạng thái trống để người dùng tự nhập."""
         self.is_updating_programmatically = True
         self.source_text_edit.setPlainText("")
-        self.is_updating_programmatically = False
         self.target_text_edit.setPlainText("")
         
         # Đọc cấu hình ngôn ngữ hiển thị mặc định
         from config.settings import settings_manager
-        from config.constants import SUPPORTED_LANGUAGES
         settings = settings_manager.load_settings()
         src_code = settings.get("source_lang", "Auto")
         tgt_code = settings.get("target_lang", "Vietnamese")
         
-        source_lang = SUPPORTED_LANGUAGES.get(src_code, "Tự động")
-        target_lang = SUPPORTED_LANGUAGES.get(tgt_code, "Tiếng Việt")
-        self.lang_label.setText(f"{source_lang.upper()} ➜ {target_lang.upper()}")
+        idx_src = self.src_lang_combo.findData(src_code)
+        if idx_src >= 0:
+            self.src_lang_combo.setCurrentIndex(idx_src)
+            
+        idx_tgt = self.tgt_lang_combo.findData(tgt_code)
+        if idx_tgt >= 0:
+            self.tgt_lang_combo.setCurrentIndex(idx_tgt)
+            
+        self.is_updating_programmatically = False
         
         if x is not None and y is not None:
             self.move(x, y)
@@ -238,16 +269,25 @@ class PopTranslationWidget(QWidget):
     def display_result(self, raw_text: str, result_dict: dict, target_lang: str = "Vietnamese"):
         """
         Đổ kết quả dịch thuật chi tiết từ AI vào hộp thoại.
-        
-        Args:
-            raw_text (str): Văn bản gốc.
-            result_dict (dict): Từ điển kết quả dịch có cấu trúc từ AI.
-                                 Ví dụ: {"translation": "...", "explanation": "..."}
-            target_lang (str): Tên ngôn ngữ đích cài đặt.
         """
         self.source_text = raw_text
         self.is_updating_programmatically = True
         self.source_text_edit.setPlainText(raw_text)
+        
+        # Đồng bộ hóa combobox với cấu hình hiện tại
+        from config.settings import settings_manager
+        settings = settings_manager.load_settings()
+        src_code = settings.get("source_lang", "Auto")
+        tgt_code = settings.get("target_lang", "Vietnamese")
+        
+        idx_src = self.src_lang_combo.findData(src_code)
+        if idx_src >= 0:
+            self.src_lang_combo.setCurrentIndex(idx_src)
+            
+        idx_tgt = self.tgt_lang_combo.findData(tgt_code)
+        if idx_tgt >= 0:
+            self.tgt_lang_combo.setCurrentIndex(idx_tgt)
+            
         self.is_updating_programmatically = False
         
         translation = result_dict.get("translation", "")
@@ -270,16 +310,6 @@ class PopTranslationWidget(QWidget):
         }
         self.target_lang_code = lang_to_code.get(target_lang, "vi")
         self.source_lang_code = detected_lang.lower() if detected_lang else "en"
-        
-        # Get target language friendly name
-        from config.constants import SUPPORTED_LANGUAGES
-        target_lang_name = SUPPORTED_LANGUAGES.get(target_lang, target_lang).upper()
-        
-        # Cập nhật tiêu đề ngôn ngữ
-        if detected_lang:
-            self.lang_label.setText(f"{detected_lang.upper()} ➜ {target_lang_name}")
-        else:
-            self.lang_label.setText(f"AI ➜ {target_lang_name}")
             
         # Định dạng văn bản hiển thị đẹp mắt
         display_html = f"<b>Bản dịch:</b><br>{translation}"
@@ -289,6 +319,22 @@ class PopTranslationWidget(QWidget):
             display_html += f"<br><br><b>Giải thích chi tiết:</b><br>{explanation.replace(chr(10), '<br>')}"
             
         self.target_text_edit.setHtml(display_html)
+
+    def _on_lang_combo_changed(self):
+        """Xử lý khi người dùng thay đổi ngôn ngữ ngay trên Popup."""
+        if getattr(self, "is_updating_programmatically", False):
+            return
+            
+        src_val = self.src_lang_combo.currentData()
+        tgt_val = self.tgt_lang_combo.currentData()
+        
+        from config.settings import settings_manager
+        settings_manager.set("source_lang", src_val)
+        settings_manager.set("target_lang", tgt_val)
+        
+        text = self.source_text_edit.toPlainText()
+        if text.strip():
+            self.translation_requested.emit(text)
 
     def update_theme(self, new_theme: str, new_font_size: int):
         """Cập nhật font chữ và giao diện màu sắc."""
@@ -351,7 +397,7 @@ class PopTranslationWidget(QWidget):
 
     def show_translation_loading(self):
         """Hiển thị trạng thái loading chỉ riêng cho ô kết quả dịch (khi người dùng đang tự gõ)."""
-        self.target_text_edit.setPlainText("Đang dịch bằng AI, vui lòng chờ trong giây lát...")
+        self.target_text_edit.setPlainText("Đang dịch, vui lòng chờ trong giây lát...")
 
     def _on_source_text_changed(self):
         if self.is_updating_programmatically:

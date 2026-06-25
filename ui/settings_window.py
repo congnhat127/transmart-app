@@ -106,18 +106,7 @@ class SettingsWindow(QWidget):
         self.ocr_hotkey_input.setPlaceholderText("Ví dụ: alt+q")
         form_general.addRow("Phím tắt OCR:", self.ocr_hotkey_input)
         
-        # Ngôn ngữ nguồn (Source Language)
-        self.source_lang_combo = QComboBox()
-        for lang_key, lang_name in SUPPORTED_LANGUAGES.items():
-            self.source_lang_combo.addItem(lang_name, lang_key)
-        form_general.addRow("Dịch từ (Nguồn):", self.source_lang_combo)
-        
-        # Ngôn ngữ đích (Target Language)
-        self.target_lang_combo = QComboBox()
-        for lang_key, lang_name in SUPPORTED_LANGUAGES.items():
-            if lang_key != "Auto":
-                self.target_lang_combo.addItem(lang_name, lang_key)
-        form_general.addRow("Dịch sang (Đích):", self.target_lang_combo)
+
         
         general_layout.addLayout(form_general)
         general_layout.addStretch()
@@ -134,6 +123,8 @@ class SettingsWindow(QWidget):
         provider_group.setObjectName("ApiGroupBox")
         provider_form = QFormLayout(provider_group)
         self.provider_combo = QComboBox()
+        self.provider_combo.addItem("Google Translate (Miễn phí, không cần Key)", "google")
+        self.provider_combo.addItem("Free Dictionary API (Từ điển Anh-Anh)", "dictionary")
         self.provider_combo.addItem("Google Gemini Cloud", "gemini")
         self.provider_combo.addItem("OpenAI GPT Cloud", "openai")
         provider_form.addRow("Dịch vụ sử dụng:", self.provider_combo)
@@ -221,16 +212,7 @@ class SettingsWindow(QWidget):
         self.hotkey_input.setText(settings.get("hotkey", "alt+z"))
         self.ocr_hotkey_input.setText(settings.get("ocr_hotkey", "alt+q"))
         
-        # Nạp cài đặt ngôn ngữ
-        source_lang = settings.get("source_lang", "Auto")
-        idx_source = self.source_lang_combo.findData(source_lang)
-        if idx_source >= 0:
-            self.source_lang_combo.setCurrentIndex(idx_source)
-            
-        target_lang = settings.get("target_lang", "Vietnamese")
-        idx_target = self.target_lang_combo.findData(target_lang)
-        if idx_target >= 0:
-            self.target_lang_combo.setCurrentIndex(idx_target)
+
         
         # Nạp cài đặt API
         provider_val = settings.get("provider", "gemini")
@@ -260,13 +242,18 @@ class SettingsWindow(QWidget):
         """Lưu toàn bộ cài đặt từ UI xuống file settings.json."""
         theme_val = "dark" if self.theme_combo.currentIndex() == 0 else "light"
         
+        # Đọc cấu hình hiện tại để giữ lại cấu hình ngôn ngữ của popup
+        current_settings = settings_manager.load_settings()
+        source_lang = current_settings.get("source_lang", "Auto")
+        target_lang = current_settings.get("target_lang", "Vietnamese")
+        
         new_settings = {
             "theme": theme_val,
             "font_size": self.font_size_spin.value(),
             "hotkey": self.hotkey_input.text().strip().lower(),
             "ocr_hotkey": self.ocr_hotkey_input.text().strip().lower(),
-            "source_lang": self.source_lang_combo.currentData(),
-            "target_lang": self.target_lang_combo.currentData(),
+            "source_lang": source_lang,
+            "target_lang": target_lang,
             "provider": self.provider_combo.currentData(),
             "gemini_api_key": self.gemini_key_input.text().strip(),
             "gemini_model": self.gemini_model_combo.currentText(),

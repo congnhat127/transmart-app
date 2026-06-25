@@ -231,20 +231,18 @@ class TransMartApp:
             x, y = pos.x(), pos.y()
             
         # Lấy ngôn ngữ nguồn và đích từ cài đặt
+        from config.settings import settings_manager
+        self.settings = settings_manager.load_settings()
         source_lang = self.settings.get("source_lang", "Auto")
         target_lang = self.settings.get("target_lang", "Vietnamese")
         
-        # Ánh xạ tên ngôn ngữ thân thiện từ hằng số hiển thị lên UI
-        from config.constants import SUPPORTED_LANGUAGES
-        ui_src = SUPPORTED_LANGUAGES.get(source_lang, source_lang)
-        ui_tgt = SUPPORTED_LANGUAGES.get(target_lang, target_lang)
-        
-        # 1. Hiển thị trạng thái Loading tức thời để tăng trải nghiệm người dùng
-        self.pop_translation.show_loading(text, x, y, source_lang=ui_src, target_lang=ui_tgt)
+        # 1. Hiển thị trạng thái Loading tức thời để tăng trải nghiệm người dùng (truyền key trực tiếp)
+        self.pop_translation.show_loading(text, x, y, source_lang=source_lang, target_lang=target_lang)
         self.last_active_window = self.pop_translation
         
         # 1.5. Kiểm tra Cache cục bộ trước khi gọi AI để đạt tốc độ tức thời (0ms)
-        cached_record = history_manager.find_cached_record(text, target_lang)
+        provider = self.settings.get("provider", "gemini")
+        cached_record = history_manager.find_cached_record(text, target_lang, provider)
         if cached_record:
             print(f"[DEBUG] Tìm thấy bản dịch trùng khớp trong Cache (0ms) cho: '{text[:20]}...'")
             self.display_translation_result(text, cached_record, save_to_history=False)
@@ -269,6 +267,8 @@ class TransMartApp:
         if not text.strip():
             return
             
+        from config.settings import settings_manager
+        self.settings = settings_manager.load_settings()
         source_lang = self.settings.get("source_lang", "Auto")
         target_lang = self.settings.get("target_lang", "Vietnamese")
         
@@ -276,7 +276,8 @@ class TransMartApp:
         self.pop_translation.show_translation_loading()
         
         # Kiểm tra Cache cục bộ
-        cached_record = history_manager.find_cached_record(text, target_lang)
+        provider = self.settings.get("provider", "gemini")
+        cached_record = history_manager.find_cached_record(text, target_lang, provider)
         if cached_record:
             print(f"[DEBUG] Tìm thấy bản dịch trùng khớp trong Cache (0ms) cho văn bản sửa: '{text[:20]}...'")
             self.display_translation_result(text, cached_record, save_to_history=False)
@@ -295,6 +296,8 @@ class TransMartApp:
     def display_translation_result(self, text: str, result: dict, save_to_history: bool = True):
         """Hiển thị kết quả dịch lên popup và ghi vào lịch sử nếu cần."""
         # 1. Đổ kết quả vào bảng dịch nổi
+        from config.settings import settings_manager
+        self.settings = settings_manager.load_settings()
         target_lang = self.settings.get("target_lang", "Vietnamese")
         self.pop_translation.display_result(text, result, target_lang)
         
@@ -309,7 +312,8 @@ class TransMartApp:
         target_lang = self.settings.get("target_lang", "Vietnamese")
         
         if "Chưa cấu hình" not in translation and "đã xảy ra lỗi" not in translation.lower():
-            history_manager.add_record(text, translation, explanation, detected_lang, target_lang, summary)
+            provider = self.settings.get("provider", "gemini")
+            history_manager.add_record(text, translation, explanation, detected_lang, target_lang, summary, provider)
             # Tải lại danh sách lịch sử nếu cửa sổ lịch sử đang mở để cập nhật dữ liệu mới nhất
             if self.history_window.isVisible():
                 self.history_window.load_history()
