@@ -1,7 +1,6 @@
 import time
 import ctypes
 import pyperclip
-import keyboard
 
 def is_clipboard_image_or_file() -> bool:
     """Kiểm tra xem clipboard hiện tại có đang chứa hình ảnh hoặc file hay không (trên Windows)."""
@@ -40,37 +39,58 @@ class ClipboardManager:
         """
         # 1. Sao lưu dữ liệu clipboard hiện có của người dùng
         # Sử dụng try-except phòng trường hợp clipboard đang bị ứng dụng khác khóa
+        has_image_or_file_initially = is_clipboard_image_or_file()
         try:
             old_clipboard = pyperclip.paste()
         except Exception:
             old_clipboard = ""
         
-        # 2. Xóa sạch clipboard tạm thời
-        try:
-            pyperclip.copy("")
-        except Exception:
-            pass
+        # 2. Xóa sạch clipboard tạm thời nếu ban đầu không chứa ảnh/file
+        # (Để tránh ảnh hưởng tới tiến trình copy văn bản thuần túy)
+        if not has_image_or_file_initially:
+            try:
+                pyperclip.copy("")
+            except Exception:
+                pass
         
         # 3. Chờ và giải phóng các phím bổ trợ đang bị đè bởi người dùng (nếu có)
         # Khi nhấn Alt+Z, ngón tay người dùng vẫn đang đè vật lý lên phím Alt.
         # Chúng ta sẽ chờ tối đa 300ms cho đến khi họ nhấc ngón tay ra khỏi phím Alt/Shift/Ctrl.
+        VK_SHIFT = 0x10
+        VK_CONTROL = 0x11
+        VK_MENU = 0x12
+        VK_ESCAPE = 0x1B
+        VK_C = 0x43
+        KEYEVENTF_KEYUP = 0x0002
+
         start_wait = time.time()
-        while (keyboard.is_pressed("alt") or keyboard.is_pressed("ctrl") or keyboard.is_pressed("shift")) and (time.time() - start_wait < 0.3):
+        while True:
+            is_pressed = (
+                (ctypes.windll.user32.GetAsyncKeyState(VK_SHIFT) & 0x8000 != 0) or
+                (ctypes.windll.user32.GetAsyncKeyState(VK_CONTROL) & 0x8000 != 0) or
+                (ctypes.windll.user32.GetAsyncKeyState(VK_MENU) & 0x8000 != 0)
+            )
+            if not is_pressed or (time.time() - start_wait >= 0.3):
+                break
             time.sleep(0.01)
             
         # Giải phóng ảo thêm lần nữa cho chắc chắn
-        keyboard.release("alt")
-        keyboard.release("shift")
-        keyboard.release("ctrl")
+        ctypes.windll.user32.keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0)
+        ctypes.windll.user32.keybd_event(VK_SHIFT, 0, KEYEVENTF_KEYUP, 0)
+        ctypes.windll.user32.keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0)
         time.sleep(0.05)  # Chờ 50ms để Windows đồng bộ trạng thái phím
         
         # Gửi phím ESC để tắt trạng thái Ribbon KeyTips (gợi ý phím tắt menu) của MS Word nếu được yêu cầu.
         if dismiss_menu:
-            keyboard.send("esc")
+            ctypes.windll.user32.keybd_event(VK_ESCAPE, 0, 0, 0)
+            ctypes.windll.user32.keybd_event(VK_ESCAPE, 0, KEYEVENTF_KEYUP, 0)
             time.sleep(0.05)
         
         # Mô phỏng hành động gõ phím Ctrl + C cấp hệ thống
-        keyboard.send("ctrl+c")
+        ctypes.windll.user32.keybd_event(VK_CONTROL, 0, 0, 0)
+        ctypes.windll.user32.keybd_event(VK_C, 0, 0, 0)
+        ctypes.windll.user32.keybd_event(VK_C, 0, KEYEVENTF_KEYUP, 0)
+        ctypes.windll.user32.keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0)
         
         # 4. Vòng lặp chờ dữ liệu mới được nạp vào clipboard
         # Tăng timeout lên 0.5 giây để đảm bảo MS Word có đủ thời gian ghi dữ liệu vào clipboard
@@ -88,8 +108,8 @@ class ClipboardManager:
             time.sleep(0.04)
             
         # 5. Khôi phục lại dữ liệu clipboard ban đầu của người dùng
-        # Chỉ khôi phục nếu hiện tại clipboard KHÔNG chứa hình ảnh hoặc file mới được tạo (như ảnh chụp màn hình)
-        if not is_clipboard_image_or_file():
+        # Chỉ khôi phục nếu hiện tại lẫn ban đầu clipboard KHÔNG chứa hình ảnh hoặc file mới được tạo (như ảnh chụp màn hình)
+        if not has_image_or_file_initially and not is_clipboard_image_or_file():
             try:
                 pyperclip.copy(old_clipboard)
             except Exception:
