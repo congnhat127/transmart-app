@@ -114,6 +114,9 @@ class TransMartApp:
         hotkey = self.settings.get("hotkey", "alt+z")
         ocr_hotkey = self.settings.get("ocr_hotkey", "alt+q")
         self.listener.start(hotkey=hotkey, ocr_hotkey=ocr_hotkey)
+        
+        # Hiển thị bảng dịch trống ngay khi khởi động ứng dụng
+        self.pop_translation.show_blank()
 
     def stop(self):
         """Dọn dẹp tài nguyên khi thoát ứng dụng."""
