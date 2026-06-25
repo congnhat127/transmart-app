@@ -64,6 +64,23 @@ class TTSService:
         self.audio_output.setVolume(1.0)  # Âm lượng tối đa (0.0 -> 1.0)
         self.thread = None
         self.current_file_path = None
+        
+        # Kết nối các tín hiệu debug của QMediaPlayer để theo dõi tiến độ phát
+        self.player.playbackStateChanged.connect(self._on_state_changed)
+        self.player.positionChanged.connect(self._on_position_changed)
+        self.player.errorChanged.connect(self._on_error_changed)
+
+    def _on_state_changed(self, state):
+        print(f"[TTS DEBUG] Playback state changed: {state.name}")
+
+    def _on_position_changed(self, position):
+        current_sec = position // 1000
+        if not hasattr(self, "_last_printed_sec") or self._last_printed_sec != current_sec:
+            self._last_printed_sec = current_sec
+            print(f"[TTS DEBUG] Playing: {position} / {self.player.duration()} ms")
+
+    def _on_error_changed(self):
+        print(f"[TTS DEBUG] Player error event: {self.player.error()} - {self.player.errorString()}")
 
     def speak(self, text: str, language_code: str):
         """Phát âm đoạn văn bản bằng giọng nói tương thích ngôn ngữ."""
@@ -73,6 +90,14 @@ class TTSService:
         # Dừng phát luồng hiện tại trước
         self.stop()
         
+        # Làm sạch văn bản trước khi phát: loại bỏ HTML tags (như <b>, <br>) và chuẩn hóa các khoảng trắng/xuống dòng
+        import re
+        clean_text = re.sub(r'<[^>]+>', '', text)
+        clean_text = " ".join(clean_text.split())
+        
+        if not clean_text.strip():
+            return
+            
         # Chuẩn hóa mã ngôn ngữ (ví dụ: 'en-US' -> 'en', 'vi-VN' -> 'vi')
         lang = (language_code or "en").lower().split("-")[0]
         voice = VOICE_MAPPING.get(lang, VOICE_MAPPING["en"])
@@ -82,8 +107,8 @@ class TTSService:
             self.thread.terminate()
             self.thread.wait()
             
-        # Khởi chạy luồng mới
-        self.thread = TTSDownloadThread(text, voice)
+        # Khởi chạy luồng mới với văn bản đã làm sạch
+        self.thread = TTSDownloadThread(clean_text, voice)
         self.thread.download_finished.connect(self._play_audio)
         self.thread.download_failed.connect(lambda err: print(f"[TTS] Lỗi tải giọng đọc: {err}"))
         self.thread.start()
@@ -91,9 +116,13 @@ class TTSService:
     def _play_audio(self, file_path: str):
         """Nạp tệp mp3 và phát âm thanh qua QMediaPlayer."""
         if not os.path.exists(file_path):
+            print(f"[TTS DEBUG] Audio file not found: {file_path}")
             return
 
         try:
+            file_size = os.path.getsize(file_path)
+            print(f"[TTS DEBUG] Playing file: {file_path} ({file_size} bytes)")
+            
             self.player.stop()
             self.player.setSource(QUrl.fromLocalFile(file_path))
             self.player.play()
