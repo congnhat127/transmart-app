@@ -34,6 +34,18 @@ class SettingsManager:
         """Lưu toàn bộ hoặc một phần cấu hình mới xuống file config.json."""
         if new_settings:
             self.settings.update(new_settings)
+            # Log cụ thể các giá trị quan trọng để người dùng dễ kiểm chứng trên Terminal
+            g_key = new_settings.get("gemini_api_key")
+            o_key = new_settings.get("openai_api_key")
+            prov = new_settings.get("provider")
+            if prov is not None:
+                print(f"[Cấu hình] Đã chuyển nhà cung cấp dịch vụ AI sang: {prov}")
+            if g_key is not None:
+                g_show = f"{g_key[:6]}...{g_key[-4:]}" if len(g_key) > 10 else ("trống" if not g_key else g_key)
+                print(f"[Cấu hình] Lưu Gemini API Key mới: {g_show}")
+            if o_key is not None:
+                o_show = f"{o_key[:6]}...{o_key[-4:]}" if len(o_key) > 10 else ("trống" if not o_key else o_key)
+                print(f"[Cấu hình] Lưu OpenAI API Key mới: {o_show}")
         try:
             # Tạo thư mục chứa file cấu hình nếu chưa tồn tại (ví dụ: storage)
             os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)

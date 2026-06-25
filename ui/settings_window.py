@@ -129,6 +129,16 @@ class SettingsWindow(QWidget):
         api_layout.setContentsMargins(10, 15, 10, 15)
         api_layout.setSpacing(12)
         
+        # Nhóm cấu hình Provider dịch thuật
+        provider_group = QGroupBox("Nhà cung cấp dịch vụ AI (Provider)")
+        provider_group.setObjectName("ApiGroupBox")
+        provider_form = QFormLayout(provider_group)
+        self.provider_combo = QComboBox()
+        self.provider_combo.addItem("Google Gemini Cloud", "gemini")
+        self.provider_combo.addItem("OpenAI GPT Cloud", "openai")
+        provider_form.addRow("Dịch vụ sử dụng:", self.provider_combo)
+        api_layout.addWidget(provider_group)
+        
         # Nhóm cấu hình Gemini API
         gemini_group = QGroupBox("Google Gemini Cloud (Khuyên dùng)")
         gemini_group.setObjectName("ApiGroupBox")
@@ -223,6 +233,11 @@ class SettingsWindow(QWidget):
             self.target_lang_combo.setCurrentIndex(idx_target)
         
         # Nạp cài đặt API
+        provider_val = settings.get("provider", "gemini")
+        idx_provider = self.provider_combo.findData(provider_val)
+        if idx_provider >= 0:
+            self.provider_combo.setCurrentIndex(idx_provider)
+            
         self.gemini_key_input.setText(settings.get("gemini_api_key", ""))
         gemini_model = settings.get("gemini_model", "gemini-1.5-flash")
         idx_gemini = self.gemini_model_combo.findText(gemini_model)
@@ -252,6 +267,7 @@ class SettingsWindow(QWidget):
             "ocr_hotkey": self.ocr_hotkey_input.text().strip().lower(),
             "source_lang": self.source_lang_combo.currentData(),
             "target_lang": self.target_lang_combo.currentData(),
+            "provider": self.provider_combo.currentData(),
             "gemini_api_key": self.gemini_key_input.text().strip(),
             "gemini_model": self.gemini_model_combo.currentText(),
             "openai_api_key": self.openai_key_input.text().strip(),

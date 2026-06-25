@@ -1,9 +1,14 @@
 import os
+import sys
 import asyncio
 import tempfile
 import edge_tts
 from PyQt6.QtCore import QThread, pyqtSignal, QUrl
-from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
+from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput, QMediaDevices
+
+is_windows = sys.platform == "win32"
+if is_windows:
+    import ctypes
 
 # Bản đồ ánh xạ mã ngôn ngữ sang giọng đọc tương ứng của Microsoft Edge TTS
 VOICE_MAPPING = {
@@ -52,9 +57,10 @@ class TTSService:
     """Xử lý chuyển đổi văn bản thành giọng nói (Text-to-Speech) bằng Edge TTS và phát âm thanh."""
     def __init__(self):
         self.player = QMediaPlayer()
-        self.audio_output = QAudioOutput()
+        # Chỉ định rõ thiết bị ra mặc định và gán player làm cha để tránh bị GC thu hồi giữa chừng
+        self.audio_output = QAudioOutput(QMediaDevices.defaultAudioOutput(), self.player)
         self.player.setAudioOutput(self.audio_output)
-        self.audio_output.setVolume(1.0)  # Âm lượng tối đa
+        self.audio_output.setVolume(1.0)  # Âm lượng tối đa (0.0 -> 1.0)
         self.thread = None
 
     def speak(self, text: str, language_code: str):
@@ -78,7 +84,40 @@ class TTSService:
         self.thread.start()
 
     def _play_audio(self, file_path: str):
-        """Nạp tệp mp3 và phát âm thanh qua QMediaPlayer."""
-        if os.path.exists(file_path):
+        """Nạp tệp mp3 và phát âm thanh qua MCI (Windows) hoặc QMediaPlayer (các HĐH khác)."""
+        if not os.path.exists(file_path):
+            return
+
+        if is_windows:
+            try:
+                winmm = ctypes.windll.winmm
+                # Đóng luồng âm thanh cũ nếu đang phát để tránh tiếng đè lên nhau
+                winmm.mciSendStringW("close transmart_tts_alias", None, 0, 0)
+                
+                # Mở tệp mp3 mới
+                open_cmd = f'open "{file_path}" type mpegvideo alias transmart_tts_alias'
+                ret_open = winmm.mciSendStringW(open_cmd, None, 0, 0)
+                
+                if ret_open == 0:
+                    # Phát âm thanh bất đồng bộ
+                    winmm.mciSendStringW("play transmart_tts_alias", None, 0, 0)
+                else:
+                    # Nếu MCI lỗi, sử dụng fallback QMediaPlayer
+                    self.player.setSource(QUrl.fromLocalFile(file_path))
+                    self.player.play()
+            except Exception as e:
+                print(f"[TTS] Lỗi phát âm qua MCI: {e}. Sử dụng fallback QMediaPlayer...")
+                self.player.setSource(QUrl.fromLocalFile(file_path))
+                self.player.play()
+        else:
             self.player.setSource(QUrl.fromLocalFile(file_path))
             self.player.play()
+
+    def stop(self):
+        """Dừng phát âm thanh và dọn dẹp tài nguyên."""
+        if is_windows:
+            try:
+                ctypes.windll.winmm.mciSendStringW("close transmart_tts_alias", None, 0, 0)
+            except Exception:
+                pass
+        self.player.stop()

@@ -127,6 +127,8 @@ class TransMartApp:
         if self.translation_thread and self.translation_thread.isRunning():
             self.translation_thread.terminate()
             self.translation_thread.wait()
+        if hasattr(self, "tts_service") and self.tts_service:
+            self.tts_service.stop()
 
     def on_text_selected(self, text: str, x: int, y: int):
         """Hiển thị nút tròn dịch nhanh khi bôi đen thành công."""
