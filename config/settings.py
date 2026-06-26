@@ -3,7 +3,14 @@ import json
 from config.constants import DEFAULT_SETTINGS
 
 # Đường dẫn gốc dự án và đường dẫn file lưu cấu hình
-ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+import sys
+if hasattr(sys, 'frozen'):
+    # Khi chạy file đóng gói, lưu vào AppData/Local/TransMart để đảm bảo quyền ghi và bảo toàn khi update app
+    ROOT_DIR = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "TransMart")
+else:
+    # Khi dev, lưu trực tiếp tại thư mục dự án cho dễ debug
+    ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 CONFIG_PATH = os.path.join(ROOT_DIR, "storage", "config.json")
 
 class SettingsManager:
