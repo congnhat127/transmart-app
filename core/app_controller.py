@@ -135,7 +135,8 @@ class TransMartApp:
 
     def on_text_selected(self, text: str, x: int, y: int):
         """Hiển thị nút tròn dịch nhanh khi bôi đen thành công."""
-        self.pop_translation.hide()
+        if not self.pop_translation.isMinimized():
+            self.pop_translation.hide()
         
         screen = QApplication.primaryScreen()
         dpi_scale = screen.devicePixelRatio() if screen else 1.0
