@@ -9,6 +9,64 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from core.app_controller import TransMartApp
 
+def create_shortcuts():
+    """Tự động tạo phím tắt ngoài Desktop và Start Menu khi chạy file build (.exe)."""
+    import sys
+    import os
+    import subprocess
+    
+    # Chỉ tạo shortcut khi chạy bản đóng gói (.exe)
+    if not hasattr(sys, 'frozen'):
+        return
+        
+    exe_path = os.path.abspath(sys.executable)
+    working_dir = os.path.dirname(exe_path)
+    app_name = "TransMart"
+    
+    desktop_dir = os.path.expandvars(r"%USERPROFILE%\Desktop")
+    start_menu_dir = os.path.expandvars(r"%APPDATA%\Microsoft\Windows\Start Menu\Programs")
+    
+    desktop_shortcut = os.path.join(desktop_dir, f"{app_name}.lnk")
+    start_menu_shortcut = os.path.join(start_menu_dir, f"{app_name}.lnk")
+    
+    # Nếu đã tồn tại cả hai shortcut thì không cần tạo lại
+    if os.path.exists(desktop_shortcut) and os.path.exists(start_menu_shortcut):
+        return
+        
+    # Tạo PowerShell Script sinh shortcut thông qua COM
+    ps_script = f"""
+    $WshShell = New-Object -ComObject WScript.Shell
+    
+    if (-not (Test-Path "{desktop_shortcut}")) {{
+        $Shortcut = $WshShell.CreateShortcut("{desktop_shortcut}")
+        $Shortcut.TargetPath = "{exe_path}"
+        $Shortcut.WorkingDirectory = "{working_dir}"
+        $Shortcut.IconLocation = "{exe_path},0"
+        $Shortcut.Save()
+    }}
+    
+    if (-not (Test-Path "{start_menu_shortcut}")) {{
+        $Shortcut = $WshShell.CreateShortcut("{start_menu_shortcut}")
+        $Shortcut.TargetPath = "{exe_path}"
+        $Shortcut.WorkingDirectory = "{working_dir}"
+        $Shortcut.IconLocation = "{exe_path},0"
+        $Shortcut.Save()
+    }}
+    """
+    
+    try:
+        # Chạy ẩn tiến trình PowerShell để tránh nháy màn hình cmd đen
+        subprocess.run(
+            ["powershell", "-NoProfile", "-Command", ps_script],
+            creationflags=0x08000000, # CREATE_NO_WINDOW
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        print("[Hệ thống] Đã tự động tạo các phím tắt (Shortcut) trên Desktop và Start Menu.")
+    except Exception as e:
+        print(f"[Hệ thống] Không thể tự động tạo shortcut: {e}")
+
 def sigint_handler(app_instance):
     """Hàm xử lý bắt phím tắt Ctrl+C để thoát ứng dụng."""
     def handler(*args):
@@ -30,6 +88,12 @@ def main():
     # Khởi tạo ứng dụng PyQt6
     app = QApplication(sys.argv)
     
+    # Tự động tạo Shortcut nếu cần thiết
+    try:
+        create_shortcuts()
+    except Exception as create_err:
+        print(f"[Hệ thống] Lỗi khi tạo phím tắt: {create_err}")
+        
     # Đảm bảo ứng dụng chạy ngầm không tự động thoát khi ẩn các cửa sổ nổi
     app.setQuitOnLastWindowClosed(False)
     

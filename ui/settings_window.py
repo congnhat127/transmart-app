@@ -3,7 +3,7 @@ import time
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
     QComboBox, QSpinBox, QPushButton, QTabWidget, QFormLayout, QGroupBox,
-    QApplication, QMessageBox
+    QApplication, QMessageBox, QTextBrowser
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QEvent, QThread
 from PyQt6.QtGui import QFont, QCursor
@@ -181,6 +181,20 @@ class SettingsWindow(QWidget):
         api_layout.addStretch()
         
         self.tabs.addTab(tab_api, "Cấu hình AI API")
+        
+        # --- TAB 3: HƯỚNG DẪN SỬ DỤNG ---
+        tab_guide = QWidget()
+        guide_layout = QVBoxLayout(tab_guide)
+        guide_layout.setContentsMargins(10, 10, 10, 10)
+        
+        self.guide_browser = QTextBrowser()
+        self.guide_browser.setOpenExternalLinks(True)
+        self.guide_browser.setObjectName("GuideBrowser")
+        
+        self.update_guide_content()
+        
+        guide_layout.addWidget(self.guide_browser)
+        self.tabs.addTab(tab_guide, "Hướng dẫn sử dụng")
         
         main_layout.addWidget(self.tabs)
 
@@ -416,6 +430,10 @@ class SettingsWindow(QWidget):
                     background-color: rgba(255, 255, 255, 0.05);
                     color: #FFFFFF;
                 }
+                QTextBrowser#GuideBrowser {
+                    background-color: transparent;
+                    border: none;
+                }
             """)
         else:
             self.setStyleSheet("""
@@ -493,7 +511,63 @@ class SettingsWindow(QWidget):
                     background-color: rgba(0, 0, 0, 0.05);
                     color: #1A1A1A;
                 }
+                QTextBrowser#GuideBrowser {
+                    background-color: transparent;
+                    border: none;
+                }
             """)
+        
+        # Cập nhật nội dung hướng dẫn theo theme mới nếu widget đã được khởi tạo
+        if hasattr(self, "guide_browser"):
+            self.update_guide_content()
+
+    def update_guide_content(self):
+        """Cập nhật nội dung hướng dẫn sử dụng với màu sắc đồng bộ theo theme."""
+        guide_html = """
+        <div style="font-family: 'Segoe UI', sans-serif; font-size: 13px; line-height: 1.6; color: {text_color};">
+            <h3 style="color: #0078D4; margin-top: 0; margin-bottom: 10px;">🌟 Hướng dẫn sử dụng TransMart</h3>
+            
+            <p>Chào mừng bạn đến với <b>TransMart</b>! Ứng dụng giúp dịch nhanh văn bản, tài liệu và hình ảnh trực tiếp tại vị trí con trỏ chuột bằng trí tuệ nhân tạo (AI).</p>
+            
+            <h4 style="color: #0078D4; margin-bottom: 5px; margin-top: 15px;">🔥 Các Tính năng chính:</h4>
+            <ul>
+                <li><b>Dịch nhanh (Alt + Z)</b>: Bôi đen một từ/đoạn văn ➔ Nhấn <code>Alt + Z</code> để mở bảng dịch.</li>
+                <li><b>Dịch thông minh 🌐</b>: Chỉ cần bôi đen chữ trên Chrome/Edge/Word... ➔ Một biểu tượng nhỏ màu xanh hiện ra gần chuột ➔ Nhấp vào để dịch nhanh.</li>
+                <li><b>Dịch hình ảnh OCR (Alt + Q)</b>: Nhấn <code>Alt + Q</code> ➔ Kéo quét vùng chữ trên ảnh/video/PDF để dịch.</li>
+                <li><b>Phát âm chuẩn (TTS)</b>: Nhấp nút 🔊 <b>Đọc gốc</b> hoặc <b>Đọc dịch</b> để nghe AI phát âm chuẩn.</li>
+            </ul>
+
+            <h4 style="color: #0078D4; margin-bottom: 5px; margin-top: 15px;">🔑 Hướng dẫn lấy API Key MIỄN PHÍ:</h4>
+            <p>Để dịch thông minh bằng AI, giải thích ngữ pháp và phân tích sâu, bạn nên cài đặt API Key cá nhân của mình.</p>
+            
+            <div style="background-color: {bg_block}; border-left: 4px solid #0078D4; padding: 10px; margin: 10px 0; border-radius: 4px;">
+                <b style="color: #0078D4;">💡 Tin vui: Google Gemini API hoàn toàn MIỄN PHÍ!</b><br>
+                Google cung cấp gói miễn phí cho mọi lập trình viên và người dùng cá nhân (dành cho model <b>gemini-2.5-flash</b>). 
+                Gói này hoàn toàn đáp ứng tốt nhu cầu dịch cá nhân, <b>KHÔNG yêu cầu nhập thẻ ngân hàng, KHÔNG sợ bị trừ tiền</b>.
+            </div>
+
+            <b>Các bước đăng ký khóa Gemini API Key miễn phí:</b>
+            <ol>
+                <li>Nhấp vào liên kết: <a href="https://aistudio.google.com/" style="color: #0078D4; font-weight: bold; text-decoration: underline;">Trang Google AI Studio (aistudio.google.com)</a></li>
+                <li>Đăng nhập bằng tài khoản Google (Gmail) của bạn.</li>
+                <li>Nhấp vào nút <b>"Get API Key"</b> ở menu bên trái.</li>
+                <li>Chọn <b>"Create API Key"</b> ➔ Chọn tạo khóa mới.</li>
+                <li>Sao chép (Copy) dãy ký tự API Key vừa được tạo ra.</li>
+                <li>Chuyển qua tab <b>"Cấu hình AI API"</b> ở phía trên, chọn dịch vụ là <b>"Google Gemini Cloud"</b>, dán mã khóa vào ô <b>API Key</b> rồi nhấn nút <b>Lưu cấu hình</b> bên dưới.</li>
+            </ol>
+
+            <h4 style="color: #0078D4; margin-bottom: 5px; margin-top: 15px;">🛡️ Bảo mật thông tin:</h4>
+            <p>Khóa API Key của bạn được mã hóa và lưu trữ cục bộ ngay trên máy tính của bạn. Ứng dụng không thu thập cũng không chuyển khóa qua bất kỳ máy chủ trung gian nào khác, bảo mật tuyệt đối 100%.</p>
+        </div>
+        """
+        
+        if self.theme == "dark":
+            formatted_html = guide_html.format(text_color="#E0E0E0", bg_block="rgba(255, 255, 255, 0.05)")
+        else:
+            # Dùng màu tối rõ ràng (#1A1A1A) trên nền trắng của Light Mode để chữ hiển thị sắc nét nhất
+            formatted_html = guide_html.format(text_color="#1A1A1A", bg_block="rgba(0, 0, 0, 0.05)")
+            
+        self.guide_browser.setHtml(formatted_html)
 
     def moveEvent(self, event):
         self.last_move_resize_time = time.time()
